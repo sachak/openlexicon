@@ -18,6 +18,7 @@ def import_data(request):
     # TODO : Do some filters on files uploaded (json only, injection, etc.)
     if request.method == 'POST' and request.FILES['json_file']:
         json_file = request.FILES['json_file']
+        word_col = request.POST.get("word_col")
         db_name = os.path.splitext(json_file.name)[0]
         db_filter = Database.objects.filter(name=db_name)
         if not db_filter.exists():
@@ -30,11 +31,13 @@ def import_data(request):
             jsonDict = {}
             dbObj = DatabaseObject()
             for attr in item.keys():
-                if attr == "Word":
-                    attr = "ortho"
+                dbattr = attr
+                if attr == word_col:
+                    dbattr = "ortho"
                 try:
-                    setattr(dbObj, attr, item[attr])
-                    jsonDict[attr] = item[attr]
+                    setattr(dbObj, dbattr, item[attr])
+                    if attr != word_col:
+                        jsonDict[dbattr] = item[attr]
                 except:
                     continue
             objs.append(dbObj)
