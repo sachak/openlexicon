@@ -50,8 +50,6 @@
 <script>
     // https://datatables.net/faqs/index#speed
     var table;
-    // To keep track of original min/max slider values
-    var column_dict = {}
     $(document).ready(function() {
         // Setup - add a text input to each column
         $('#{{table_name}} thead th').each(function (i) {
@@ -59,17 +57,19 @@
             $("#{{table_name}}_filterrow").append('<th class="'+ dataType +'"><div tabindex="0" id="filterDiv'+i+'" class="form-group" style="margin-bottom: auto; position:relative"><input id="filterInput'+i+'" type="text" placeholder="All" class="form-control" data-index="' + i + '" /></div></th>');
 
             if (["float", "int"].includes(dataType)) {
-                $input = $("#filterInput"+i);
-                $filterDiv = $("#filterDiv"+i);
-                $("<div id ='filterRange"+i+"' style='position: absolute; width: 202px; opacity: 1; z-index: 1; background-color: rgb(255, 255, 255); border: 1px solid rgb(221, 221, 221); border-radius: 4px; padding: 50px 40px 10px 40px; display: none;'><div id='filterSlider"+i+"'></div></div>").insertAfter($input);
+                let $input = $("#filterInput"+i);
+                let $filterDiv = $("#filterDiv"+i);
+                let $filterRange = $("<div id ='filterRange"+i+"' style='position: absolute; width: 202px; opacity: 1; z-index: 1; background-color: rgb(255, 255, 255); border: 1px solid rgb(221, 221, 221); border-radius: 4px; padding: 50px 40px 10px 40px; display: none;'><div id='filterSlider"+i+"'></div></div>")
+                $filterRange.insertAfter($input);
 
+                // TODO : avoid using both jquery and js to get filterDiv. Find a way to handle focus in/out with only jquery.
                 $filterDiv.on({
                     focusin: function() {
-                        $("#filterRange"+i).show().trigger('show');
+                        $filterRange.show().trigger('show');
                     },
                     focusout: function() {
                         if (!document.getElementById("filterDiv"+i).matches(':focus-within')) { // we hide slider if no focus inside div (on input or slider)
-                            $("#filterRange"+i).hide().trigger('hide');
+                            $filterRange.hide().trigger('hide');
                         }
                     }
                 })
@@ -164,10 +164,11 @@
             },
             type: 'POST',
             success: function(data) {
-                column_dict[i] = [data.min, data.max];
-                filterSlider = document.getElementById("filterSlider"+i);
-                step = null;
-                format = null;
+                let data_column = [data.min, data.max];
+                let filterSlider = document.getElementById("filterSlider"+i);
+                let $filterInput = $("#filterInput"+i);
+                let step = null;
+                let format = null;
                 if ($("#filterSlider"+i).closest("th").hasClass("int")) {
                     step = 1;
                     format = {
@@ -180,8 +181,8 @@
                     }
                 }
                 noUiSlider.create(filterSlider, {
-                    start: column_dict[i],
-                    range: {'min': column_dict[i][0], 'max': column_dict[i][1]},
+                    start: data_column,
+                    range: {'min': data_column[0], 'max': data_column[1]},
                     connect: true,
                     tooltips: true,
                     step: step,
@@ -189,22 +190,22 @@
                 });
 
                 filterSlider.noUiSlider.on('set', function( values, handle ) {
-                    if (!compareArrays(values.map(function(e) {return parseFloat(e);}), column_dict[i])) {
-                        $("#filterInput"+i).val(values[0] + " ... " + values[1]);
+                    if (!compareArrays(values.map(function(e) {return parseFloat(e);}), data_column)) {
+                        $filterInput.val(values[0] + " ... " + values[1]);
                     }else{
-                        $("#filterInput"+i).val("")
+                        $filterInput.val("")
                     }
                     table
-                        .column($("#filterInput"+i).data('index'))
+                        .column($filterInput.data('index'))
                         .search(values)
                         .draw();
                 });
 
-                $("#filterInput"+i).on('keyup', function() {
+                $filterInput.on('keyup', function() {
                     v = $(this).val();
                     isvalid = true;
                     if (v == "") { // all
-                        v = column_dict[i];
+                        v = data_column;
                     } else {
                         v = v.split(" ... ")
                         if (v.length !== 2 || isNaN(v[0]) || isNaN(v[1]) || v[0] > v[1]) {
@@ -214,7 +215,7 @@
                     }
                     if (isvalid) {
                         $(this).removeClass('is-invalid');
-                        document.getElementById("filterSlider"+i).noUiSlider.set(v);
+                        filterSlider.noUiSlider.set(v);
                     }
                 });
             },
