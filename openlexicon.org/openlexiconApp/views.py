@@ -7,6 +7,7 @@ from django.db.models import Max, Min
 from .models import DatabaseObject, Database
 from .datatable import ServerSideDatatableView
 import json
+import os
 
 # https://datatables.net/examples/data_sources/server_side.html
 def home(request):
@@ -46,8 +47,7 @@ def import_data(request):
 # https://github.com/umesh-krishna/django_serverside_datatable/tree/master
 class ItemListView(ServerSideDatatableView):
 	queryset = DatabaseObject.objects.all()
-	columns = ['ortho', 'phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']
-
+	columns = ['ortho'] + ["jsonData__" + x for x in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']]
 
 def filter_data(request):
     if request.method == 'POST':

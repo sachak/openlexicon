@@ -104,7 +104,7 @@ GRANT postgres TO django_openlexicon;
 
 During django step, go to /etc/nginx/nginx.conf and change user www-data; for user zebulon;
 
-After edit on gunicorn, run
+After edit on /etc/systemd/system/gunicorn.service, run
 ```
 sudo systemctl daemon-reload
 sudo systemctl restart gunicorn
