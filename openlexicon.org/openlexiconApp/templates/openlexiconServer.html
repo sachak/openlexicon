@@ -40,11 +40,13 @@
 <script>
     // https://datatables.net/faqs/index#speed
     var table;
+    const THRESHOLD = 1000 // 1 sec delay before considering input when typing in column filters
+    var timer;
     $(document).ready(function() {
         // Setup table header
         $dbHeader = $("#datatable_header")
-        {% for database, col_list in columns.items %}
-            {% for col in col_list %}
+        {% for database, column_list in columns.items %}
+            {% for col in column_list %}
                 $colHeader = $("<th id='{{database.name}}__{{col.code}}' class='{{col.type}} {{col.size}}-col'>{{col.code}}</th>")
                 $dbHeader.append($colHeader);
             {% endfor %}
@@ -183,21 +185,26 @@
                 });
 
                 $filterInput.on('keyup', function() {
-                    v = $(this).val();
-                    isvalid = true;
-                    if (v == "") { // all
-                        v = data_column;
-                    } else {
-                        v = v.split(" ... ")
-                        if (v.length !== 2 || isNaN(v[0]) || isNaN(v[1]) || v[0] > v[1]) {
-                            $(this).addClass('is-invalid');
-                            isvalid = false;
+                    if (timer) { // clear previous timer if there is one
+                       clearTimeout(timer);
+                    }
+                    timer = setTimeout(function() {
+                        v = $filterInput.val();
+                        isvalid = true;
+                        if (v == "") { // all
+                            v = data_column;
+                        } else {
+                            v = v.split(" ... ")
+                            if (v.length !== 2 || isNaN(v[0]) || isNaN(v[1]) || v[0] > v[1]) {
+                                $filterInput.addClass('is-invalid');
+                                isvalid = false;
+                            }
                         }
-                    }
-                    if (isvalid) {
-                        $(this).removeClass('is-invalid');
-                        filterSlider.noUiSlider.set(v);
-                    }
+                        if (isvalid) {
+                            $filterInput.removeClass('is-invalid');
+                            filterSlider.noUiSlider.set(v);
+                        }
+                    }, THRESHOLD);
                 });
             },
             error: function(e) {
