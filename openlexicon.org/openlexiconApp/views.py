@@ -1,31 +1,58 @@
-from django.shortcuts import render
 from django.conf import settings
-from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Max, Min
-from .models import DatabaseObject, Database
+from django.http import JsonResponse
+from django.shortcuts import render
 from .datatable import ServerSideDatatableView
+from .models import DatabaseObject, Database, DatabaseColumn
+from .utils import *
 import json
 import os
 
 # https://datatables.net/examples/data_sources/server_side.html
 def home(request):
-    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME})
+    if request.method == "GET":
+        # Get default columns for table header format
+        columns = get_col_dict()
+        for key, value in columns.items():
+            database_columns = list(DatabaseColumn.objects.filter(database=key))
+            for i in range(len(value)):
+                columns[key][i] = next(x for x in database_columns if x.code == value[i])
+    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': columns})
 
 @login_required
 def import_data(request):
     # TODO : Do some filters on files uploaded (json only, injection, etc.)
     if request.method == 'POST' and request.FILES['json_file']:
         json_file = request.FILES['json_file']
+        try:
+            col_file = request.FILES['col_file']
+            col_data = json.load(col_file)
+        except:
+            col_data = {}
+
         word_col = request.POST.get("word_col")
         db_name = os.path.splitext(json_file.name)[0]
         db_filter = Database.objects.filter(name=db_name)
+        data = json.load(json_file)
         if not db_filter.exists():
             db = Database.objects.create(name=db_name)
         else:
             db = db_filter[0]
-        data = json.load(json_file)
+        # Create database columns if they do not exist
+        if len(data["data"]) > 0:
+            model = data["data"][0]
+            for key in model.keys():
+                if key != word_col:
+                    col_filter = DatabaseColumn.objects.filter(database=db, code=key)
+                    if not col_filter.exists():
+                        col = DatabaseColumn.objects.create(database=db, code=key)
+                        # if we have info on column provided by col_file.json, we replace default values with the ones provided
+                        if key in col_data:
+                            for attr in ["name", "size", "type"]:
+                                setattr(col, attr, col_data[key][attr])
+                            col.save()
         objs = []
         for item in data["data"]:
             jsonDict = {}
@@ -49,12 +76,18 @@ def import_data(request):
 
 # https://github.com/umesh-krishna/django_serverside_datatable/tree/master
 class ItemListView(ServerSideDatatableView):
-	queryset = DatabaseObject.objects.all()
-	columns = ['ortho'] + ["jsonData__" + x for x in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']]
+    def get(self, request, *args, **kwargs):
+        self.col_list = kwargs.get('col_list', [])
+        # Populate col_list with default if no col_list provided
+        if self.col_list == []:
+            self.col_list = default_col_list
+        self.columns = get_col_dict(self.col_list)
+        self.queryset = DatabaseObject.objects.filter(database__in=self.columns.keys())
+        return super(ItemListView, self).get(request, *args, **kwargs)
 
+# NOTE : to return min/max for slider creation
 def filter_data(request):
     if request.method == 'POST':
-        # TODO : need to filter for selected db only
-        # NOTE : to return min/max for slider creation
-        col_data = DatabaseObject.objects.values_list(request.POST.get("colName"), flat=True).distinct()
+        database, colName = getDbColFromString(request.POST.get('colName'))
+        col_data = DatabaseObject.objects.filter(database=Database.objects.get(name=database)).values_list(f"jsonData__{colName}", flat=True).distinct()
         return JsonResponse({"min": min(col_data), "max": max(col_data)})

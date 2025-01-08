@@ -27,18 +27,8 @@
 {% csrf_token %}
 <table id="{{table_name}}" class="display nowrap" style="width: 100% !important">
     <thead>
-        <tr>
-            <th class="text">ortho</th>
-            <th class="text">phon</th>
-            <th class="text">lemme</th>
-            <th class="text">cgram</th>
-            <th class="float">freqlemfilms2</th>
-            <th class="float">freqfilms2</th>
-            <th class="int">nblettres</th>
-            <th class="int">puorth</th>
-            <th class="int">puphon</th>
-            <th class="int">nbsyll</th>
-            <th class="text">cgramortho</th>
+        <tr id="datatable_header">
+            <th id="ortho_col" class="text large-col">ortho</th>
         </tr>
         <tr id="{{table_name}}_filterrow">
         </tr>
@@ -51,12 +41,21 @@
     // https://datatables.net/faqs/index#speed
     var table;
     $(document).ready(function() {
+        // Setup table header
+        $dbHeader = $("#datatable_header")
+        {% for database, col_list in columns.items %}
+            {% for col in col_list %}
+                $colHeader = $("<th id='{{database.name}}__{{col.code}}' class='{{col.type}} {{col.size}}-col'>{{col.code}}</th>")
+                $dbHeader.append($colHeader);
+            {% endfor %}
+        {% endfor %}
+
         // Setup - add a text input to each column
         $('#{{table_name}} thead th').each(function (i) {
             dataType = $(this).attr("class");
             $("#{{table_name}}_filterrow").append('<th class="'+ dataType +'"><div tabindex="0" id="filterDiv'+i+'" class="form-group" style="margin-bottom: auto; position:relative"><input id="filterInput'+i+'" type="text" placeholder="All" class="form-control" data-index="' + i + '" /></div></th>');
 
-            if (["float", "int"].includes(dataType)) {
+            if ($(this).hasClass("int") || $(this).hasClass("float")) {
                 let $input = $("#filterInput"+i);
                 let $filterDiv = $("#filterDiv"+i);
                 let $filterRange = $("<div id ='filterRange"+i+"' style='position: absolute; width: 202px; opacity: 1; z-index: 1; background-color: rgb(255, 255, 255); border: 1px solid rgb(221, 221, 221); border-radius: 4px; padding: 50px 40px 10px 40px; display: none;'><div id='filterSlider"+i+"'></div></div>")
@@ -93,24 +92,6 @@
             serverSide: true, // https://datatables.net/examples/data_sources/server_side. With server-side processing enabled, all paging, searching, ordering actions that DataTables performs are handed off to a server where an SQL engine (or similar) can perform these actions on the large data set (after all, that's what the database engine is designed for!)
             ajax: "{% url 'openlexiconApp:data' %}",
             processing: true, // Enable the display of a 'processing' indicator when the table is being processed
-            columnDefs: [
-                {className: "large-col", targets:[0,1,2]},
-                {className: "medium-col", targets:[10]},
-                {className: "small-col", targets:[3,4,5,6,7,8,9]},
-            ],
-            columns: [
-                { name: "ortho", data: 0 },
-                { name: "phon", data: 1 },
-                { name: "lemme", data: 2 },
-                { name: "cgram", data: 3 },
-                { name: "freqlemfilms2", data: 4 },
-                { name: "freqfilms2", data: 5 },
-                { name: "nblettres", data: 6 },
-                { name: "puorth", data: 7 },
-                { name: "puphon", data: 8 },
-                { name: "nbsyll", data: 9 },
-                { name: "cgramortho", data: 10 },
-            ],
             scrollX: true,
             fixedColumns:true, // fix first column when scrolling right
             initComplete: function(settings, json) { // Add slider filters (needs to be done after table is initialized to get min/max slider values). Largely inspired by https://github.com/rstudio/DT/
@@ -159,7 +140,7 @@
         $.ajax({
             url: "{% url 'openlexiconApp:filter_data' %}",
             data: {
-                colName: table.column(i).header().innerText, // TODO : change for something more robust (i index will not be reliable when column selection will be available)
+                colName: table.column(i).header().id,
                 csrfmiddlewaretoken:$('input[name=csrfmiddlewaretoken]').val()
             },
             type: 'POST',

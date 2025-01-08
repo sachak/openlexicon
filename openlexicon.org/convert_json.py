@@ -5,6 +5,7 @@ from pathlib import Path
 import warnings
 import codecs
 import os
+import easygui
 BLOCKSIZE = 1048576
 
 # https://www.askpython.com/python/examples/convert-csv-to-json
@@ -47,6 +48,9 @@ def tsv_to_json(tsv_file_path):
     with open(json_file_path, 'w', encoding = 'utf-8') as json_file_handler:
         json_file_handler.write(json.dumps({"data": data_list}, indent = 4))
 
-tsv_file_path = input('Enter the absolute path of the TSV file: ')
+tsv_file_path = easygui.fileopenbox(msg="Choose a TSV file", filetypes=[["*.tsv", "TSV Files"]])
 
-tsv_to_json(tsv_file_path)
+if tsv_file_path is not None:
+    tsv_to_json(tsv_file_path)
+else:
+    print("Choose a TSV file to proceed")
