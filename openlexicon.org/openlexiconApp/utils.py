@@ -31,3 +31,6 @@ class DbColMap:
         return db_name, col_name
 
 default_DbColList = [f"Lexique383__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']] + ["Voisins__NbVoisOrth"]
+
+try: default_db = Database.objects.get(name="Lexique383")
+except: default_db = Database.objects.none()

@@ -3,11 +3,11 @@
 from django.views import View
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models import QuerySet, F
+from django.db.models import QuerySet, F, Q, Subquery, OuterRef
 from collections import namedtuple
 import operator
 from .models import ExportMode
-from django.db.models import Q
+from .utils import default_db
 from functools import reduce
 from pyexcelerate import Workbook
 import csv
@@ -89,17 +89,28 @@ class DataTablesServer(object):
                 for or_tuple in [x for x in _filter if isinstance(x, list)]:
                     qs = qs.filter(reduce(operator.or_, [Q(x) for x in or_tuple]))
 
-        qs = qs.order_by("ortho")
         # self.full_data = qs.values_list(*self.attr_list) # TODO : for export
         # Rename attributes (jsonData__attr) to column_list pattern (database__jsonData__attr)
         attr_list = [x.replace(x.split("jsonData", 1)[0], "") for x in self.column_list]
         # TODO : check if same column_names in several databases can be an issue
-        data = qs.values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list))}).distinct("ortho")
-        print(data.count())
-        # TODO : regroup
-        # data =
-        # if sorting != "":
-        #     data = data.order_by('%s' % sorting)
+        # Group if several databases
+        if len(self.dbColMap.databases) > 1:
+            if default_db in self.dbColMap.databases:
+                ref_db = default_db
+            else:
+                ref_db = self.dbColMap.databases[0]
+
+            # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
+            # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
+            data = qs.filter(database=ref_db).values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list)) if ref_db.name in self.column_list[i]})
+            for db in [db for db in self.dbColMap.databases if db != ref_db]:
+                db_qs = qs.filter(database=db, ortho=OuterRef('ortho'))
+                data = data.annotate(**{self.column_list[i]:Subquery(db_qs.values(attr_list[i])[:1]) for i in range(1, len(self.column_list)) if db.name in self.column_list[i]})
+        else:
+            data = qs.values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list))})
+
+        if sorting != "":
+            data = data.order_by('%s' % sorting)
         len_data = data.count()
         _index = int(pages.start)
         data = data[_index:_index + (pages.length - pages.start)]
