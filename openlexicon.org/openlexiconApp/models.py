@@ -29,7 +29,7 @@ class Database(models.Model):
 class DatabaseObject(models.Model):
     database = models.ForeignKey(Database, on_delete=models.CASCADE)
     ortho = models.CharField(max_length=50, verbose_name="Word")
-    lemme = models.CharField(max_length=50, verbose_name="Lemme")
+    lemme = models.CharField(max_length=50, verbose_name="Lemme", null=True)
     cgram = models.CharField(max_length=20, verbose_name="Grammatical category", null=True)
     jsonData = models.JSONField(null=True)
 
