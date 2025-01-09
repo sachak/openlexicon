@@ -27,7 +27,7 @@ class Database(models.Model):
     language = models.CharField(max_length=20, choices=Lang.choices, default=Lang.FR)
 
 class DatabaseObject(models.Model):
-    database = models.ForeignKey(Database, on_delete=models.CASCADE)
+    database = models.ForeignKey(Database, on_delete=models.CASCADE, db_index=True)
     ortho = models.CharField(max_length=50, verbose_name="Word")
     lemme = models.CharField(max_length=50, verbose_name="Lemme", null=True)
     cgram = models.CharField(max_length=20, verbose_name="Grammatical category", null=True)
@@ -37,7 +37,7 @@ class DatabaseObject(models.Model):
         unique_together = ('database', 'ortho', 'cgram', 'lemme',)
 
 class DatabaseColumn(models.Model):
-    database = models.ForeignKey(Database, on_delete=models.CASCADE)
+    database = models.ForeignKey(Database, on_delete=models.CASCADE, db_index=True)
     code = models.CharField(max_length=50, verbose_name="Code")
     name = models.CharField(max_length=50, verbose_name="Nom")
     size = models.CharField(max_length=10, verbose_name="Taille", default=ColSize.MEDIUM)

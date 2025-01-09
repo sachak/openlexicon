@@ -20,7 +20,7 @@ class DbColMap:
                 self.column_dict[database] = [col_name]
             else:
                 self.column_dict[database].append(col_name)
-        self.databases = self.column_dict.keys()
+        self.databases = list(self.column_dict.keys())
 
     @staticmethod
     def get_db_col_from_string(string):

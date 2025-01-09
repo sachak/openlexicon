@@ -40,7 +40,7 @@ class DataTablesServer(object):
     def output_result(self):
         output = dict()
         # output['sEcho'] = str(int(self.request_values['sEcho']))
-        output['iTotalRecords'] = str(self.qs.count())
+        output['iTotalRecords'] = str(self.data_count)
         output['iTotalDisplayRecords'] = str(self.cardinality_filtered)
         data_rows = []
 
@@ -52,21 +52,7 @@ class DataTablesServer(object):
             data_rows.append(data_row)
         output['aaData'] = data_rows
         return output
-
-    def group_data(self, data_list):
-        # Keep only words with entries in all selected databases
-
-        current_dict = None
-        final_data = []
-        for row in data_list:
-            if current_dict is None or row["ortho"] != current_dict["ortho"]:
-                current_dict = row
-                final_data.append(current_dict)
-            else:
-                current_dict = {**current_dict, **row}
-        final_data.append(current_dict)
-        return final_data
-
+        
     def run_queries(self):
         # pages has 'start' and 'length' attributes
         pages = self.paging()
@@ -76,6 +62,15 @@ class DataTablesServer(object):
         sorting = self.sorting()
         # custom filter
         qs = self.qs
+
+        # Determine database of reference (ref_db) for count and column grouping.
+        ref_db = self.dbColMap.databases[0]
+        if len(self.dbColMap.databases) > 1:
+            if default_db in self.dbColMap.databases:
+                ref_db = default_db
+            self.data_count = qs.filter(database=ref_db).count()
+        else:
+            self.data_count = qs.count()
 
         if _filter:
             if op == "or":
@@ -95,27 +90,38 @@ class DataTablesServer(object):
         # TODO : check if same column_names in several databases can be an issue
         # Group if several databases
         if len(self.dbColMap.databases) > 1:
-            if default_db in self.dbColMap.databases:
-                ref_db = default_db
-            else:
-                ref_db = self.dbColMap.databases[0]
-
             # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
             # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
+            # ref_db is the only one for which rows will not change. If we have more than one database, we annotate the queryset of ref_db to add columns from other databases.
             data = qs.filter(database=ref_db).values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list)) if ref_db.name in self.column_list[i]})
+
             for db in [db for db in self.dbColMap.databases if db != ref_db]:
                 db_qs = qs.filter(database=db, ortho=OuterRef('ortho'))
                 data = data.annotate(**{self.column_list[i]:Subquery(db_qs.values(attr_list[i])[:1]) for i in range(1, len(self.column_list)) if db.name in self.column_list[i]})
         else:
             data = qs.values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list))})
-
-        if sorting != "":
-            data = data.order_by('%s' % sorting)
+        if sorting == "":
+            sorting = "ortho"
+        data = data.order_by('%s' % sorting)
         len_data = data.count()
-        _index = int(pages.start)
-        data = data[_index:_index + (pages.length - pages.start)]
 
-        self.result_data = list(data)
+        # Pagination
+        # If index is in 20000 last ones, reverse queryset to get faster indexing. Inspired by : https://www.reddit.com/r/django/comments/4dn0mo/how_to_optimize_pagination_for_large_queryset/
+        _index = int(pages.start)
+        _nb_pages = int(pages.length - pages.start)
+        _end_index = min(_index + _nb_pages, len_data)
+        PAGE_THRESHOLD = 20000
+        if len_data > PAGE_THRESHOLD * 2 and len_data - _index < PAGE_THRESHOLD:
+            reversed_data = data.order_by(f"-{sorting}")
+            _old_index = _index
+            _index = len_data - _end_index
+            _end_index = len_data - _old_index
+            reversed_data = reversed_data[_index:_end_index]
+            data = reversed(reversed_data)
+        else:
+            data = data[_index:_end_index]
+
+        self.result_data = data
 
         # length of filtered set
         if _filter:
