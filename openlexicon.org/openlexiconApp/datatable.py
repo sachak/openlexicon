@@ -24,7 +24,7 @@ class Echo:
 class DataTablesServer(object):
     def __init__(self, request, dbColMap, qs):
         self.dbColMap = dbColMap
-        self.column_list = ["ortho"] + [x.replace("__", "__jsonData__") for x in self.dbColMap.column_list] # change pattern for column_name from database__col_name to database__jsonData__col_name
+        self.column_list = ["ortho"] + [x.replace("__", "__jsonData__", 1) for x in self.dbColMap.column_list] # change pattern for column_name from database__col_name to database__jsonData__col_name
         # values specified by the datatable for filtering, sorting, paging
         self.request_values = request.GET
         # results from the db

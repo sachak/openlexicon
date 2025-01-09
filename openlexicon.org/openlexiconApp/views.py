@@ -5,7 +5,7 @@ from django.db.models import Max, Min
 from django.http import JsonResponse
 from django.shortcuts import render
 from .datatable import ServerSideDatatableView
-from .models import DatabaseObject, Database, DatabaseColumn
+from .models import DatabaseObject, Database, DatabaseColumn, ColType
 from .utils import *
 import json
 import os
@@ -43,6 +43,7 @@ def import_data(request):
         # Create database columns if they do not exist
         if len(data["data"]) > 0:
             model = data["data"][0]
+            col_types = {}
             for key in model.keys():
                 if key != word_col:
                     col_filter = DatabaseColumn.objects.filter(database=db, code=key)
@@ -53,18 +54,24 @@ def import_data(request):
                             for attr in ["name", "size", "type"]:
                                 setattr(col, attr, col_data[key][attr])
                             col.save()
+                            col_types[col.code] = col.type
+                    else:
+                        col_types[col_filter[0].code] = col_filter[0].type
         objs = []
         for item in data["data"]:
             jsonDict = {}
             dbObj = DatabaseObject()
             for attr in item.keys():
                 dbattr = attr
+                itemAttr = item[attr]
                 if attr == word_col:
                     dbattr = "ortho"
+                elif col_types[attr] in [ColType.INT, ColType.FLOAT]: # remove all spaces from columns declared as int/float
+                    itemAttr = itemAttr.replace(" ", "")
                 try:
-                    setattr(dbObj, dbattr, item[attr])
+                    setattr(dbObj, dbattr, itemAttr)
                     if attr != word_col:
-                        jsonDict[dbattr] = item[attr]
+                        jsonDict[dbattr] = itemAttr
                 except:
                     continue
             objs.append(dbObj)
