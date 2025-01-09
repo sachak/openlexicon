@@ -13,8 +13,8 @@ import os
 # https://datatables.net/examples/data_sources/server_side.html
 def home(request):
     if request.method == "GET":
-        # Get default columns for table header format
-        columns = get_col_dict()
+        # Get default database and columns for table header format
+        columns = dict(DbColMap(default_DbColList).column_dict) # make a copy of default dict
         for key, value in columns.items():
             database_columns = list(DatabaseColumn.objects.filter(database=key))
             for i in range(len(value)):
@@ -77,17 +77,17 @@ def import_data(request):
 # https://github.com/umesh-krishna/django_serverside_datatable/tree/master
 class ItemListView(ServerSideDatatableView):
     def get(self, request, *args, **kwargs):
-        self.col_list = kwargs.get('col_list', [])
-        # Populate col_list with default if no col_list provided
-        if self.col_list == []:
-            self.col_list = default_col_list
-        self.columns = get_col_dict(self.col_list)
-        self.queryset = DatabaseObject.objects.filter(database__in=self.columns.keys())
+        column_list = kwargs.get('column_list', [])
+        # Populate column_list with default if no column_list provided
+        if column_list == []:
+            column_list = default_DbColList
+        self.dbColMap = DbColMap(column_list)
+        self.queryset = DatabaseObject.objects.filter(database__in=self.dbColMap.databases)
         return super(ItemListView, self).get(request, *args, **kwargs)
 
 # NOTE : to return min/max for slider creation
 def filter_data(request):
     if request.method == 'POST':
-        database, colName = getDbColFromString(request.POST.get('colName'))
-        col_data = DatabaseObject.objects.filter(database=Database.objects.get(name=database)).values_list(f"jsonData__{colName}", flat=True).distinct()
+        database, colName = DbColMap.get_db_col_from_string(request.POST.get('colName'))
+        col_data = DatabaseObject.objects.filter(database=Database.objects.get(name=database)).select_related("database").values_list(f"jsonData__{colName}", flat=True).distinct()
         return JsonResponse({"min": min(col_data), "max": max(col_data)})

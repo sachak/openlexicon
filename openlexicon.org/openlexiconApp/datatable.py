@@ -3,16 +3,17 @@
 from django.views import View
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models import QuerySet
+from django.db.models import QuerySet, F, Q, Subquery, OuterRef
 from collections import namedtuple
 import operator
 from .models import ExportMode
-from django.db.models import Q
+from .utils import default_db
 from functools import reduce
 from pyexcelerate import Workbook
 import csv
 import os
 import io
+from openlexicon.render_data import num_queries
 
 order_dict = {'asc': '', 'desc': '-'}
 
@@ -21,8 +22,9 @@ class Echo:
         return value
 
 class DataTablesServer(object):
-    def __init__(self, request, columns, qs):
-        self.columns = columns
+    def __init__(self, request, dbColMap, qs):
+        self.dbColMap = dbColMap
+        self.column_list = ["ortho"] + [x.replace("__", "__jsonData__") for x in self.dbColMap.column_list] # change pattern for column_name from database__col_name to database__jsonData__col_name
         # values specified by the datatable for filtering, sorting, paging
         self.request_values = request.GET
         # results from the db
@@ -44,13 +46,26 @@ class DataTablesServer(object):
 
         for row in self.result_data:
             data_row = []
-            for i in range(len(self.columns)):
-                # val = getattr(row, self.columns[i])
-                val = row[self.columns[i]]
+            for i in range(len(self.column_list)):
+                val = row[self.column_list[i]]
                 data_row.append(val)
             data_rows.append(data_row)
         output['aaData'] = data_rows
         return output
+
+    def group_data(self, data_list):
+        # Keep only words with entries in all selected databases
+
+        current_dict = None
+        final_data = []
+        for row in data_list:
+            if current_dict is None or row["ortho"] != current_dict["ortho"]:
+                current_dict = row
+                final_data.append(current_dict)
+            else:
+                current_dict = {**current_dict, **row}
+        final_data.append(current_dict)
+        return final_data
 
     def run_queries(self):
         # pages has 'start' and 'length' attributes
@@ -64,25 +79,41 @@ class DataTablesServer(object):
 
         if _filter:
             if op == "or":
-                data = qs.filter(
+                qs = qs.filter(
                     reduce(operator.or_, _filter))
             else:
-                data = qs.filter(
-                    reduce(operator.and_, _filter))
-            if sorting != "":
-                data = data.order_by('%s' % sorting)
-            len_data = data.count()
+                qs = qs.filter(
+                    reduce(operator.and_, [x for x in _filter])
+                )
+                # We handle separately nested lists : they are tuples for jsonData, used to check if key is null in jsonData, or if it contains the desired string or range
+                for or_tuple in [x for x in _filter if isinstance(x, list)]:
+                    qs = qs.filter(reduce(operator.or_, [Q(x) for x in or_tuple]))
 
-            self.full_data = data.values_list(*self.columns)
-            data = list(data[pages.start:pages.length].values(*self.columns))
+        # self.full_data = qs.values_list(*self.attr_list) # TODO : for export
+        # Rename attributes (jsonData__attr) to column_list pattern (database__jsonData__attr)
+        attr_list = [x.replace(x.split("jsonData", 1)[0], "") for x in self.column_list]
+        # TODO : check if same column_names in several databases can be an issue
+        # Group if several databases
+        if len(self.dbColMap.databases) > 1:
+            if default_db in self.dbColMap.databases:
+                ref_db = default_db
+            else:
+                ref_db = self.dbColMap.databases[0]
+
+            # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
+            # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
+            data = qs.filter(database=ref_db).values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list)) if ref_db.name in self.column_list[i]})
+            for db in [db for db in self.dbColMap.databases if db != ref_db]:
+                db_qs = qs.filter(database=db, ortho=OuterRef('ortho'))
+                data = data.annotate(**{self.column_list[i]:Subquery(db_qs.values(attr_list[i])[:1]) for i in range(1, len(self.column_list)) if db.name in self.column_list[i]})
         else:
-            if sorting != "":
-                qs = qs.order_by('%s' % sorting)
-            self.full_data = qs.values_list(*self.columns)
-            data = qs.values(*self.columns)
-            len_data = data.count()
-            _index = int(pages.start)
-            data = data[_index:_index + (pages.length - pages.start)]
+            data = qs.values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list))})
+
+        if sorting != "":
+            data = data.order_by('%s' % sorting)
+        len_data = data.count()
+        _index = int(pages.start)
+        data = data[_index:_index + (pages.length - pages.start)]
 
         self.result_data = list(data)
 
@@ -95,25 +126,33 @@ class DataTablesServer(object):
 
     def filtering(self):
         # build your filter spec
-        or_filter = []
+        filter = []
         # search for single value (table search field)
         if (self.request_values.get('search[value]')) and (self.request_values['search[value]'] != ""):
             op = "or"
-            for i in range(len(self.columns)):
+            for i in range(len(self.column_list)):
                 if self.request_values['columns[%d][searchable]' % i] == 'true':
-                    or_filter.append(
-                        Q(**{'%s__icontains' % self.columns[i]: self.request_values['search[value]']}))
+                    filter.append(
+                        Q(**{'%s__icontains' % self.column_list[i]: self.request_values['search[value]']}))
         # search for each column (column search field)
         else:
             op = "and"
-            for i in range(len(self.columns)):
-                col_list = self.request_values.getlist(f'columns[{i}][search][value][]')
+            for i in range(len(self.column_list)):
+                column_list = self.request_values.getlist(f'columns[{i}][search][value][]')
                 col_elt = self.request_values.get(f'columns[{i}][search][value]')
                 if (col_elt and col_elt != ""): # characters
-                    or_filter.append((self.columns[i]+'__icontains', col_elt))
-                elif (col_list and len(col_list) == 2) : # numbers
-                    or_filter.append((self.columns[i]+'__range', col_list))
-        q_list = [Q(x) for x in or_filter]
+                    filter.append((f"{self.column_list[i]}__icontains", col_elt))
+                elif (column_list and len(column_list) == 2) : # numbers. WARNING : range does not work with JSONField on SQLite. It works on server with Postgresql.
+                    filter.append((f"{self.column_list[i]}__range", column_list))
+        q_list = []
+        for query in filter:
+            if "jsonData" in query[0]: # if jsonData, use original query filter only if DatabaseObject has relevant database (has other database OR apply original query filter)
+                col_elts = query[0].split("__", 1)
+                database_name = col_elts[0]
+                col_name = col_elts[1]
+                q_list.append((~Q((f'database__name', database_name)) | Q((col_name, query[1]))))
+            else:
+                q_list.append(Q(query))
         return q_list, op
 
     def sorting(self):
@@ -124,7 +163,7 @@ class DataTablesServer(object):
             # sort direction
             sort_direction = self.request_values['order[0][dir]']
 
-            order = ('' if order == '' else ',') +order_dict[sort_direction]+self.columns[column_number]
+            order = ('' if order == '' else ',') +order_dict[sort_direction]+self.column_list[column_number]
 
         return order
 
@@ -139,7 +178,7 @@ class DataTablesServer(object):
 
 class ServerSideDatatableView(View):
     queryset = None
-    columns = None
+    dbColMap = None
     model = None
 
     def export(self, table, mode):
@@ -180,7 +219,7 @@ class ServerSideDatatableView(View):
         if export_mode != None and not request.GET.get("export_post"): # get ajax url for real export
             return JsonResponse({"url": request.build_absolute_uri()}, safe=False)
         table = DataTablesServer(
-            request, self.columns, self.get_queryset())
+            request, self.dbColMap, self.get_queryset())
         if export_mode != None:
             return self.export(table, export_mode)
         else:

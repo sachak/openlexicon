@@ -20,6 +20,7 @@ def generate_col_json(json_file_path):
         val_type = "text"
         if isfloat_regex(model[key]):
             val_type = "float"
+            size = "small"
         elif model[key].isdigit():
             val_type = "int"
             size = "small"
