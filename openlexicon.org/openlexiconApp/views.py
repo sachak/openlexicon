@@ -1,7 +1,9 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Max, Min
+from django.db.models import Max, Min, IntegerField, FloatField
+from django.db.models.functions import Cast
+from django.db.models.fields.json import KeyTextTransform
 from django.http import JsonResponse
 from django.shortcuts import render
 from .datatable import ServerSideDatatableView
@@ -95,6 +97,35 @@ class ItemListView(ServerSideDatatableView):
 # NOTE : to return min/max for slider creation
 def filter_data(request):
     if request.method == 'POST':
-        database, colName = DbColMap.get_db_col_from_string(request.POST.get('colName'))
-        col_data = DatabaseObject.objects.filter(database=Database.objects.get(name=database)).select_related("database").values_list(f"jsonData__{colName}", flat=True).distinct()
-        return JsonResponse({"min": min(col_data), "max": max(col_data)})
+        column_dict = {}
+        min_max_dict = {}
+        for id in request.POST.getlist('colNames[]'):
+            database, colName = DbColMap.get_db_col_from_string(id)
+            colElts = colName.split("__")
+            colClasses = colElts[-1].split(" ")
+            colInfo_dict = {"colName": "__".join(colElts[:-1]), "class": IntegerField() if ColType.INT in colClasses else FloatField()}
+            if database not in column_dict:
+                column_dict[database] = [colInfo_dict]
+            else:
+                column_dict[database].append(colInfo_dict)
+        # Aggregate min/max
+        for database in column_dict.keys():
+            # For each database, get distinct colName values
+            data = DatabaseObject.objects.filter(
+                database=Database.objects.get(name=database)).select_related("database").values(
+                *[f"jsonData__{x['colName']}" for x in column_dict[database]]
+                ).distinct()
+            data = data.annotate( # Cast to Float or IntegerField
+                **{f"{colInfo['colName']}_cast":Cast(KeyTextTransform(colInfo["colName"], "jsonData"), colInfo["class"]) for colInfo in column_dict[database]}
+            ).aggregate( # Aggregate to min and max
+                **{f"{colInfo['colName']}__min":Min(f"{colInfo['colName']}_cast") for colInfo in column_dict[database]},
+                **{f"{colInfo['colName']}__max":Max(f"{colInfo['colName']}_cast") for colInfo in column_dict[database]}
+            )
+            # Create min_max_dict of form {"database__colName": {"min": value, "max": value}}
+            for key, value in data.items():
+                keyElts = key.rsplit("__", 1)
+                colName = f"{database}__{keyElts[0]}"
+                if colName not in min_max_dict:
+                    min_max_dict[colName] = {}
+                min_max_dict[colName][keyElts[1]] = value
+        return JsonResponse(min_max_dict)
