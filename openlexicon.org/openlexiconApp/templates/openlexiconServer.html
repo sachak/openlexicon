@@ -173,6 +173,7 @@
                     $filterInput.val(values[0] + " ... " + values[1]);
                 }else{
                     $filterInput.val("")
+                    values = ""; // set values to empty string to avoid searching for min/max values (which equals applying no filter)
                 }
                 table
                     .column($filterInput.data('index'))

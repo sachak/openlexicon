@@ -26,7 +26,7 @@ class Echo:
 class DataTablesServer(object):
     def __init__(self, request, dbColMap, qs):
         self.dbColMap = dbColMap
-        self.column_list = ["ortho"] + [x.replace("__", "__jsonData__", 1) for x in self.dbColMap.column_list] # change pattern for column_name from database__col_name to database__jsonData__col_name
+        self.column_list = ["ortho"] + [f"{x}__cast" for x in self.dbColMap.column_list] # change pattern for column_name from database__col_name to database__col_name__cast
         # values specified by the datatable for filtering, sorting, paging
         self.request_values = request.GET
         # results from the db
@@ -56,21 +56,7 @@ class DataTablesServer(object):
         output["min_max_dict"] = self.min_max_dict
         return output
 
-    def run_queries(self):
-        # pages has 'start' and 'length' attributes
-        pages = self.paging()
-        # the term you entered into the datatable search
-        _filter, op = self.filtering()
-        # the document field you chose to sort
-        sorting = self.sorting()
-        # custom filter
-        qs = self.qs
-
-        # Get min/max
-        cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # split to databasecolumn list
-        qs = qs.annotate( # Cast to Float or IntegerField
-            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), ColType.get_field_class(col.type)) for col in cast_col_list}
-        )
+    def get_min_max(self, qs, cast_col_list):
         # TODO : if too slow, try to convert JSONField to normal field and add index=True to speed up aggregate operation
         min_max_dict = qs.aggregate( # Aggregate to min and max
             **{f"{col.database.name}__{col.code}__min":Min(f"{col.database.name}__{col.code}__cast") for col in cast_col_list if col.type != ColType.TEXT},
@@ -85,47 +71,69 @@ class DataTablesServer(object):
                 self.min_max_dict[colName] = {}
             self.min_max_dict[colName][colElts[1]] = value
 
+    def run_queries(self):
+        # pages has 'start' and 'length' attributes
+        pages = self.paging()
+        # the term you entered into the datatable search
+        _filter, op = self.filtering()
+        # the document field you chose to sort
+        sorting = self.sorting()
+        # custom filter
+        qs = self.qs
+
+        # Cast
+        cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # split to databasecolumn list
+        qs = qs.annotate( # Cast to Float or IntegerField
+            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), ColType.get_field_class(col.type)) for col in cast_col_list}
+        )
+
         # Determine database of reference (ref_db) for count and column grouping.
         ref_db = self.dbColMap.databases[0]
         if len(self.dbColMap.databases) > 1:
             if default_db in self.dbColMap.databases:
                 ref_db = default_db
-            self.data_count = qs.filter(database=ref_db).count()
         else:
             self.data_count = qs.count()
 
-        if _filter:
-            if op == "or":
-                qs = qs.filter(
-                    reduce(operator.or_, _filter))
-            else:
-                qs = qs.filter(
-                    reduce(operator.and_, [x for x in _filter])
-                )
-                # We handle separately nested lists : they are tuples for jsonData, used to check if key is null in jsonData, or if it contains the desired string or range
-                for or_tuple in [x for x in _filter if isinstance(x, list)]:
-                    qs = qs.filter(reduce(operator.or_, [Q(x) for x in or_tuple]))
-
         # self.full_data = qs.values_list(*self.attr_list) # TODO : for export
-        # Rename attributes (jsonData__attr) to column_list pattern (database__jsonData__attr)
-        attr_list = [x.replace(x.split("jsonData", 1)[0], "") for x in self.column_list]
         # TODO : check if same column_names in several databases can be an issue
         # Group if several databases
+        # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
+        # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
         if len(self.dbColMap.databases) > 1:
-            # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
-            # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
-            # ref_db is the only one for which rows will not change. If we have more than one database, we annotate the queryset of ref_db to add columns from other databases.
-            data = qs.filter(database=ref_db).values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list)) if ref_db.name in self.column_list[i]})
-
+            data = qs.filter(database=ref_db)
             for db in [db for db in self.dbColMap.databases if db != ref_db]:
                 db_qs = qs.filter(database=db, ortho=OuterRef('ortho'))
-                data = data.annotate(**{self.column_list[i]:Subquery(db_qs.values(attr_list[i])[:1]) for i in range(1, len(self.column_list)) if db.name in self.column_list[i]})
+                # filter out words not present in other databases
+                data = data.filter(ortho__in=db_qs.values_list("ortho", flat=True))
+                # ref_db is the only one for which rows will not change. If we have more than one database, we annotate the queryset of ref_db to add columns from other databases.
+                data = data.annotate(
+                    **{f"{col.database.name}__{col.code}__cast":Subquery(db_qs.values(f"{col.database.name}__{col.code}__cast")[:1]) for col in cast_col_list if col.database == db}
+                )
+            self.data_count = data.count()
+
         else:
-            data = qs.values("ortho", **{self.column_list[i]:F(attr_list[i]) for i in range(1, len(self.column_list))})
+            data = qs
+
+        # filter after grouping
+        if _filter:
+            if op == "or":
+                data = data.filter(
+                    reduce(operator.or_, _filter))
+            else:
+                data = data.filter(
+                    reduce(operator.and_, [x for x in _filter])
+                )
         if sorting == "":
             sorting = "ortho"
         data = data.order_by('%s' % sorting)
         len_data = data.count()
+
+        # Get min max post grouping to have less objects to aggregate
+        self.get_min_max(qs, cast_col_list)
+
+        # get values
+        data = data.values("ortho", *[f"{col.database.name}__{col.code}__cast" for col in cast_col_list])
 
         # Pagination
         # If index is in 20000 last ones, reverse queryset to get faster indexing. Inspired by : https://www.reddit.com/r/django/comments/4dn0mo/how_to_optimize_pagination_for_large_queryset/
@@ -169,18 +177,12 @@ class DataTablesServer(object):
                 column_list = self.request_values.getlist(f'columns[{i}][search][value][]')
                 col_elt = self.request_values.get(f'columns[{i}][search][value]')
                 if (col_elt and col_elt != ""): # characters
-                    filter.append((f"{self.column_list[i].replace('__jsonData', '')}__cast__icontains", col_elt))
+                    filter.append((f"{self.column_list[i]}__icontains", col_elt))
                 elif (column_list and len(column_list) == 2) : # numbers. WARNING : range does not work with JSONField on SQLite. It works with Postgresql. We need to use cast for numbers to be considered as such and not as text.
-                    filter.append((f"{self.column_list[i].replace('__jsonData', '')}__cast__range", column_list))
+                    filter.append((f"{self.column_list[i]}__range", column_list))
         q_list = []
         for query in filter:
-            if "__cast__" in query[0]: # if jsonData, use original query filter only if DatabaseObject has relevant database (has other database OR apply original query filter)
-                col_elts = query[0].split("__", 1)
-                database_name = col_elts[0]
-                col_name = col_elts[1]
-                q_list.append((~Q((f'database__name', database_name)) | Q((query[0], query[1]))))
-            else:
-                q_list.append(Q(query))
+            q_list.append(Q(query))
         return q_list, op
 
     def sorting(self):
