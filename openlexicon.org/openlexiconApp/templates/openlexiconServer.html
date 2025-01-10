@@ -100,11 +100,8 @@
             stateSave: true, // State saving - restore table state on page reload
             fixedColumns:true, // fix first column when scrolling right
             initComplete: function(settings, json) { // Add slider filters (needs to be done after table is initialized to get min/max slider values). Largely inspired by https://github.com/rstudio/DT/
-                var id_list = [];
                 $('#{{table_name}}_filterrow th').each(function (i) {
-                    if ($(this).hasClass("dt-type-numeric")){
-                        id_list.push(table.column(i).header().id + "__" + $(this).attr("class"));
-                    } else { // character
+                    if (!$(this).hasClass("dt-type-numeric")){ // character
                         $("#filterInput"+i).on('keyup', function (event) { // Search filter
                             table
                                 .column($(this).data('index'))
@@ -113,7 +110,7 @@
                         });
                     }
                 });
-                setSliders(id_list);
+                setSliders(json.min_max_dict);
             }
         });
 
@@ -143,82 +140,69 @@
         return JSON.stringify(a) === JSON.stringify(b);
     };
 
-    function setSliders(id_list) {
-        $.ajax({
-            url: "{% url 'openlexiconApp:filter_data' %}",
-            data: {
-                colNames: id_list,
-                csrfmiddlewaretoken:$('input[name=csrfmiddlewaretoken]').val()
-            },
-            type: 'POST',
-            success: function(data) {
-                for(const id in data){
-                    let data_column = [data[id].min, data[id].max];
-                    let i = $("#"+id).attr("data-dt-column");
-                    let filterSlider = document.getElementById("filterSlider"+i);
-                    let $filterInput = $("#filterInput"+i);
-                    let step = null;
-                    let format = null;
-                    if ($("#filterSlider"+i).closest("th").hasClass("int")) {
-                        step = 1;
-                        format = {
-                            from: function(value) {
-                                return parseInt(value);
-                            },
-                            to: function(value) {
-                                return parseInt(value);
-                            }
+    function setSliders(data) {
+        for(const id in data){
+            let data_column = [data[id].min, data[id].max];
+            let i = $("#"+id).attr("data-dt-column");
+            let filterSlider = document.getElementById("filterSlider"+i);
+            let $filterInput = $("#filterInput"+i);
+            let step = null;
+            let format = null;
+            if ($("#filterSlider"+i).closest("th").hasClass("int")) {
+                step = 1;
+                format = {
+                    from: function(value) {
+                        return parseInt(value);
+                    },
+                    to: function(value) {
+                        return parseInt(value);
+                    }
+                }
+            }
+            noUiSlider.create(filterSlider, {
+                start: data_column,
+                range: {'min': data_column[0], 'max': data_column[1]},
+                connect: true,
+                tooltips: true,
+                step: step,
+                format: format
+            });
+
+            filterSlider.noUiSlider.on('set', function( values, handle ) {
+                if (!compareArrays(values.map(function(e) {return parseFloat(e);}), data_column)) {
+                    $filterInput.val(values[0] + " ... " + values[1]);
+                }else{
+                    $filterInput.val("")
+                }
+                table
+                    .column($filterInput.data('index'))
+                    .search(values)
+                    .draw();
+            });
+
+            $filterInput.on('keyup', function() {
+                if (timer) { // clear previous timer if there is one
+                   clearTimeout(timer);
+                }
+                timer = setTimeout(function() {
+                    v = $filterInput.val();
+                    isvalid = true;
+                    if (v == "") { // all
+                        v = data_column;
+                    } else {
+                        v = v.split(" ... ")
+                        if (v.length !== 2 || isNaN(v[0]) || isNaN(v[1]) || v[0] > v[1]) {
+                            $filterInput.addClass('is-invalid');
+                            isvalid = false;
                         }
                     }
-                    noUiSlider.create(filterSlider, {
-                        start: data_column,
-                        range: {'min': data_column[0], 'max': data_column[1]},
-                        connect: true,
-                        tooltips: true,
-                        step: step,
-                        format: format
-                    });
-
-                    filterSlider.noUiSlider.on('set', function( values, handle ) {
-                        if (!compareArrays(values.map(function(e) {return parseFloat(e);}), data_column)) {
-                            $filterInput.val(values[0] + " ... " + values[1]);
-                        }else{
-                            $filterInput.val("")
-                        }
-                        table
-                            .column($filterInput.data('index'))
-                            .search(values)
-                            .draw();
-                    });
-
-                    $filterInput.on('keyup', function() {
-                        if (timer) { // clear previous timer if there is one
-                           clearTimeout(timer);
-                        }
-                        timer = setTimeout(function() {
-                            v = $filterInput.val();
-                            isvalid = true;
-                            if (v == "") { // all
-                                v = data_column;
-                            } else {
-                                v = v.split(" ... ")
-                                if (v.length !== 2 || isNaN(v[0]) || isNaN(v[1]) || v[0] > v[1]) {
-                                    $filterInput.addClass('is-invalid');
-                                    isvalid = false;
-                                }
-                            }
-                            if (isvalid) {
-                                $filterInput.removeClass('is-invalid');
-                                filterSlider.noUiSlider.set(v);
-                            }
-                        }, THRESHOLD);
-                    });
-                }
-            },
-            error: function(e) {
-                console.log(e)
-            }
-        });
+                    if (isvalid) {
+                        $filterInput.removeClass('is-invalid');
+                        filterSlider.noUiSlider.set(v);
+                    }
+                }, THRESHOLD);
+            });
+        }
     }
 
 </script>

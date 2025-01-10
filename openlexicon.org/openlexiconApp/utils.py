@@ -1,4 +1,4 @@
-from .models import Database
+from .models import Database, DatabaseColumn
 
 # Object with pattern column_list ["database__column1", "database__column2"] and pattern column_dict {"database": ["column1", "column2"]}
 class DbColMap:
@@ -21,6 +21,9 @@ class DbColMap:
             else:
                 self.column_dict[database].append(col_name)
         self.databases = list(self.column_dict.keys())
+        # Get DatabaseColumn objects
+        for db in self.databases:
+            self.column_dict[db] = DatabaseColumn.objects.filter(database=db, code__in=self.column_dict[db]).select_related("database")
 
     @staticmethod
     def get_db_col_from_string(string):
@@ -30,7 +33,7 @@ class DbColMap:
         col_name = col_elts[1]
         return db_name, col_name
 
-default_DbColList = [f"Lexique383__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']] + [f"Voisins__{col_name}" for col_name in ["NbVoisOrth", "VoisOrth"]]
+default_DbColList = [f"Lexique383__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']] # + [f"Voisins__{col_name}" for col_name in ["NbVoisOrth", "VoisOrth"]] #+ [f"Manulex-Ortho__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]] + [f"Manulex-Lemmes__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]]
 
 try: default_db = Database.objects.get(name="Lexique383")
 except: default_db = Database.objects.none()

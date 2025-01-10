@@ -3,10 +3,12 @@
 from django.views import View
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models import QuerySet, F, Q, Subquery, OuterRef
+from django.db.models import QuerySet, F, Q, Subquery, OuterRef, Max, Min, IntegerField, FloatField
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Cast
 from collections import namedtuple
 import operator
-from .models import ExportMode
+from .models import ExportMode, ColType
 from .utils import default_db
 from functools import reduce
 from pyexcelerate import Workbook
@@ -51,8 +53,9 @@ class DataTablesServer(object):
                 data_row.append(val)
             data_rows.append(data_row)
         output['aaData'] = data_rows
+        output["min_max_dict"] = self.min_max_dict
         return output
-        
+
     def run_queries(self):
         # pages has 'start' and 'length' attributes
         pages = self.paging()
@@ -62,6 +65,25 @@ class DataTablesServer(object):
         sorting = self.sorting()
         # custom filter
         qs = self.qs
+
+        # Get min/max
+        numeric_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list if column.type != ColType.TEXT] # split to databasecolumn list
+        qs = qs.annotate( # Cast to Float or IntegerField
+            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), IntegerField() if col.type == ColType.INT else FloatField()) for col in numeric_col_list}
+        )
+        # TODO : if too slow, try to convert JSONField to normal field and add index=True to speed up aggregate operation
+        min_max_dict = qs.aggregate( # Aggregate to min and max
+            **{f"{col.database.name}__{col.code}__min":Min(f"{col.database.name}__{col.code}__cast") for col in numeric_col_list},
+            **{f"{col.database.name}__{col.code}__max":Max(f"{col.database.name}__{col.code}__cast") for col in numeric_col_list}
+        )
+        # Format from {"database__colName__min": 0, "database__colName__max": 0} to {"database__colName": {"min": 0, "max":0}}
+        self.min_max_dict = {}
+        for id, value in min_max_dict.items():
+            colElts = id.rsplit("__", 1)
+            colName = colElts[0]
+            if colName not in self.min_max_dict:
+                self.min_max_dict[colName] = {}
+            self.min_max_dict[colName][colElts[1]] = value
 
         # Determine database of reference (ref_db) for count and column grouping.
         ref_db = self.dbColMap.databases[0]
@@ -149,7 +171,7 @@ class DataTablesServer(object):
                 if (col_elt and col_elt != ""): # characters
                     filter.append((f"{self.column_list[i]}__icontains", col_elt))
                 elif (column_list and len(column_list) == 2) : # numbers. WARNING : range does not work with JSONField on SQLite. It works on server with Postgresql.
-                    filter.append((f"{self.column_list[i]}__range", column_list))
+                    filter.append((f"{self.column_list[i].replace('__jsonData', '')}__cast__range", column_list))
         q_list = []
         for query in filter:
             if "jsonData" in query[0]: # if jsonData, use original query filter only if DatabaseObject has relevant database (has other database OR apply original query filter)
