@@ -3,7 +3,7 @@
 from django.views import View
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.core.exceptions import ImproperlyConfigured
-from django.db.models import QuerySet, F, Q, Subquery, OuterRef, Max, Min, IntegerField, FloatField
+from django.db.models import QuerySet, F, Q, Subquery, OuterRef, Max, Min
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast
 from collections import namedtuple
@@ -67,14 +67,14 @@ class DataTablesServer(object):
         qs = self.qs
 
         # Get min/max
-        numeric_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list if column.type != ColType.TEXT] # split to databasecolumn list
+        cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # split to databasecolumn list
         qs = qs.annotate( # Cast to Float or IntegerField
-            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), IntegerField() if col.type == ColType.INT else FloatField()) for col in numeric_col_list}
+            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), ColType.get_field_class(col.type)) for col in cast_col_list}
         )
         # TODO : if too slow, try to convert JSONField to normal field and add index=True to speed up aggregate operation
         min_max_dict = qs.aggregate( # Aggregate to min and max
-            **{f"{col.database.name}__{col.code}__min":Min(f"{col.database.name}__{col.code}__cast") for col in numeric_col_list},
-            **{f"{col.database.name}__{col.code}__max":Max(f"{col.database.name}__{col.code}__cast") for col in numeric_col_list}
+            **{f"{col.database.name}__{col.code}__min":Min(f"{col.database.name}__{col.code}__cast") for col in cast_col_list if col.type != ColType.TEXT},
+            **{f"{col.database.name}__{col.code}__max":Max(f"{col.database.name}__{col.code}__cast") for col in cast_col_list if col.type != ColType.TEXT}
         )
         # Format from {"database__colName__min": 0, "database__colName__max": 0} to {"database__colName": {"min": 0, "max":0}}
         self.min_max_dict = {}
@@ -169,16 +169,16 @@ class DataTablesServer(object):
                 column_list = self.request_values.getlist(f'columns[{i}][search][value][]')
                 col_elt = self.request_values.get(f'columns[{i}][search][value]')
                 if (col_elt and col_elt != ""): # characters
-                    filter.append((f"{self.column_list[i]}__icontains", col_elt))
-                elif (column_list and len(column_list) == 2) : # numbers. WARNING : range does not work with JSONField on SQLite. It works on server with Postgresql.
+                    filter.append((f"{self.column_list[i].replace('__jsonData', '')}__cast__icontains", col_elt))
+                elif (column_list and len(column_list) == 2) : # numbers. WARNING : range does not work with JSONField on SQLite. It works with Postgresql. We need to use cast for numbers to be considered as such and not as text.
                     filter.append((f"{self.column_list[i].replace('__jsonData', '')}__cast__range", column_list))
         q_list = []
         for query in filter:
-            if "jsonData" in query[0]: # if jsonData, use original query filter only if DatabaseObject has relevant database (has other database OR apply original query filter)
+            if "__cast__" in query[0]: # if jsonData, use original query filter only if DatabaseObject has relevant database (has other database OR apply original query filter)
                 col_elts = query[0].split("__", 1)
                 database_name = col_elts[0]
                 col_name = col_elts[1]
-                q_list.append((~Q((f'database__name', database_name)) | Q((col_name, query[1]))))
+                q_list.append((~Q((f'database__name', database_name)) | Q((query[0], query[1]))))
             else:
                 q_list.append(Q(query))
         return q_list, op

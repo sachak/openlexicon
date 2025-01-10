@@ -11,6 +11,15 @@ class ColType(models.TextChoices):
     FLOAT = "float"
     INT = "int"
 
+    @staticmethod
+    def get_field_class(type):
+        if type == ColType.TEXT:
+            return models.CharField()
+        elif type == ColType.INT:
+            return models.IntegerField()
+        elif type == ColType.FLOAT:
+            return models.FloatField()
+
 class ExportMode(models.TextChoices):
     CSV = "CSV"
     EXCEL = "EXCEL"
