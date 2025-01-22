@@ -17,6 +17,7 @@ import csv
 import os
 import io
 from openlexicon.render_data import num_queries
+import hashlib # WARNING : it seems that hashlib is not reliable from one request to the other
 
 order_dict = {'asc': '', 'desc': '-'}
 
@@ -91,7 +92,6 @@ class DataTablesServer(object):
         self.data = data.values("ortho", *[f"{col.database.name}__{col.code}__cast" for col in cast_col_list])
 
     # https://dev.to/pragativerma18/django-caching-101-understanding-the-basics-and-beyond-49p
-    # column_list, dbcolmap, min_max, filtering, sorting, qs
     def get_cache_data(self):
         compareKeys = ["column_list", "_filter", "_sorting"]
         pattern = "&".join([f"{key}={''.join(sorted(getattr(self, key)))}" for key in compareKeys])

@@ -1,12 +1,12 @@
 call "venv\Scripts\activate"
 
 :: Start REDIS
-::START "redisprompt" redis/redis-server.exe
-::timeout /t 2
+START "redisprompt" redis/redis-server.exe
+timeout /t 2
 
 :: Start Server
 start "serverprompt" cmd.exe /c "python3 manage.py runserver"
-::timeout /t 2
+timeout /t 2
 
 :loop
 set /p answer= Type q to kill:
@@ -18,4 +18,4 @@ goto loop
 :: Kill all on quit. Use /F to force.
 :exit
 taskkill /F /FI "WINDOWTITLE eq serverprompt" /T
-::taskkill /F /FI "WINDOWTITLE eq redisprompt" /T
+taskkill /F /FI "WINDOWTITLE eq redisprompt" /T
