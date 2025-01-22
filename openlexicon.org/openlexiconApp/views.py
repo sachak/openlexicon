@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core import cache
 from django.http import JsonResponse
 from django.shortcuts import render
 from .datatable import ServerSideDatatableView
@@ -74,15 +75,14 @@ def import_data(request):
             dbObj.database = db
         DatabaseObject.objects.bulk_create(objs) # bulk to avoid multiple save requests
         messages.success(request, ("Fichier importé !"))
+        cache.clear() # Clear cache when adding new database
     return render(request, 'importForm.html')
 
 # https://github.com/umesh-krishna/django_serverside_datatable/tree/master
 class ItemListView(ServerSideDatatableView):
     def get(self, request, *args, **kwargs):
-        column_list = kwargs.get('column_list', [])
+        self.column_list = kwargs.get('column_list', [])
         # Populate column_list with default if no column_list provided
-        if column_list == []:
-            column_list = default_DbColList
-        self.dbColMap = DbColMap(column_list)
-        self.queryset = DatabaseObject.objects.filter(database__in=self.dbColMap.databases)
+        if self.column_list == []:
+            self.column_list = default_DbColList
         return super(ItemListView, self).get(request, *args, **kwargs)
