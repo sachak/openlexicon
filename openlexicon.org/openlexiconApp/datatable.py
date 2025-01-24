@@ -61,7 +61,7 @@ class DataTablesServer(object):
     # https://dev.to/pragativerma18/django-caching-101-understanding-the-basics-and-beyond-49p
     def get_cache_data(self, ref_db, full_data, filtered_data):
         compareKeys = ["column_list", "_filter"]
-        longPattern = "&".join([f"{key}={str(sorted(getattr(self, key)))}" for key in compareKeys])
+        longPattern = "&".join([f"{key}={str(getattr(self, key))}" for key in compareKeys])
         pattern = base64.urlsafe_b64encode(hashlib.sha3_512(longPattern.encode()).digest()) # use hash to have smaller cache key
         cacheKeys = ["full_data_count", "filtered_data_count"]
         data = cache.get(f"{pattern}_{cacheKeys[0]}")
