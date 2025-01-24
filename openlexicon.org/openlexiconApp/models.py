@@ -34,6 +34,7 @@ class Database(models.Model):
     name = models.CharField(max_length=50, unique=True)
     info = CKEditor5Field(blank=True, null=True) # for tooltip
     language = models.CharField(max_length=20, choices=Lang.choices, default=Lang.FR)
+    nbRows = models.IntegerField(null=True)
 
 class DatabaseObject(models.Model):
     database = models.ForeignKey(Database, on_delete=models.CASCADE, db_index=True)
@@ -51,6 +52,8 @@ class DatabaseColumn(models.Model):
     name = models.CharField(max_length=50, verbose_name="Nom")
     size = models.CharField(max_length=10, verbose_name="Taille", default=ColSize.MEDIUM)
     type = models.CharField(max_length=10, verbose_name="Type de données", default=ColType.TEXT) # try to assume type if not given ?
+    min = models.FloatField(null=True)
+    max = models.FloatField(null=True)
 
     class Meta:
         unique_together = ('database', 'code',)

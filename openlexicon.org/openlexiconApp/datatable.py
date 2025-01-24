@@ -1,6 +1,7 @@
 # https://github.com/umesh-krishna/django_serverside_datatable
 # https://pypi.org/project/django-serverside-datatable/2.1.0/#files
 from django.views import View
+from django.core.cache import cache
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models import QuerySet, F, Q, Subquery, OuterRef, Max, Min
@@ -9,12 +10,13 @@ from django.db.models.functions import Cast
 from collections import namedtuple
 import operator
 from .models import ExportMode, ColType
-from .utils import default_db
+from .utils import default_db, default_DbColList
 from functools import reduce
 from pyexcelerate import Workbook
 import csv
 import os
 import io
+import base64, hashlib
 from openlexicon.render_data import num_queries
 
 order_dict = {'asc': '', 'desc': '-'}
@@ -32,7 +34,7 @@ class DataTablesServer(object):
         # results from the db
         self.result_data = None
         # total in the table after filtering
-        self.cardinality_filtered = 0
+        self.filtered_data_count = 0
         # total in the table unfiltered
         self.cardinality = 0
         self.user = request.user
@@ -42,8 +44,8 @@ class DataTablesServer(object):
     def output_result(self):
         output = dict()
         # output['sEcho'] = str(int(self.request_values['sEcho']))
-        output['iTotalRecords'] = str(self.data_count)
-        output['iTotalDisplayRecords'] = str(self.cardinality_filtered)
+        output['iTotalRecords'] = str(self.full_data_count)
+        output['iTotalDisplayRecords'] = str(self.filtered_data_count)
         data_rows = []
 
         for row in self.result_data:
@@ -56,26 +58,45 @@ class DataTablesServer(object):
         output["min_max_dict"] = self.min_max_dict
         return output
 
+    # https://dev.to/pragativerma18/django-caching-101-understanding-the-basics-and-beyond-49p
+    def get_cache_data(self, ref_db, full_data, filtered_data):
+        compareKeys = ["column_list", "_filter"]
+        longPattern = "&".join([f"{key}={''.join(sorted(getattr(self, key)))}" for key in compareKeys])
+        pattern = base64.urlsafe_b64encode(hashlib.sha3_512(longPattern.encode()).digest()) # use hash to have smaller cache key
+        cacheKeys = ["full_data_count", "filtered_data_count"]
+        data = cache.get(f"{pattern}_{cacheKeys[0]}")
+        if data is None: # set cache
+            is_default = self.column_list == default_DbColList and not self._filter
+
+            # Get count info
+            if len(self.dbColMap.databases) == 1:
+                self.full_data_count = ref_db.nbRows
+            else:
+                self.full_data_count = full_data.count()
+            if not self._filter:
+                self.filtered_data_count = self.full_data_count
+            else:
+                self.filtered_data_count = filtered_data.count()
+
+            # Save count info in cache
+            for key in cacheKeys:
+                keyVal = getattr(self, key)
+                cache.set(f"{pattern}_{key}", keyVal, timeout=None if is_default else 3600)
+        else: # get cache
+            for key in cacheKeys:
+                setattr(self, key, cache.get(f"{pattern}_{key}"))
+
     def get_min_max(self, qs, cast_col_list):
-        # TODO : if too slow, try to convert JSONField to normal field and add index=True to speed up aggregate operation
-        min_max_dict = qs.aggregate( # Aggregate to min and max
-            **{f"{col.database.name}__{col.code}__min":Min(f"{col.database.name}__{col.code}__cast") for col in cast_col_list if col.type != ColType.TEXT},
-            **{f"{col.database.name}__{col.code}__max":Max(f"{col.database.name}__{col.code}__cast") for col in cast_col_list if col.type != ColType.TEXT}
-        )
-        # Format from {"database__colName__min": 0, "database__colName__max": 0} to {"database__colName": {"min": 0, "max":0}}
+        # Format to {"database__colName": {"min": 0, "max":0}}
         self.min_max_dict = {}
-        for id, value in min_max_dict.items():
-            colElts = id.rsplit("__", 1)
-            colName = colElts[0]
-            if colName not in self.min_max_dict:
-                self.min_max_dict[colName] = {}
-            self.min_max_dict[colName][colElts[1]] = value
+        for col in [col for col in cast_col_list if col.type != ColType.TEXT]:
+            self.min_max_dict[f"{col.database.name}__{col.code}"] = {"min": col.min, "max": col.max}
 
     def run_queries(self):
         # pages has 'start' and 'length' attributes
         pages = self.paging()
         # the term you entered into the datatable search
-        _filter, op = self.filtering()
+        self._filter, op = self.filtering()
         # the document field you chose to sort
         sorting = self.sorting()
         # custom filter
@@ -92,8 +113,6 @@ class DataTablesServer(object):
         if len(self.dbColMap.databases) > 1:
             if default_db in self.dbColMap.databases:
                 ref_db = default_db
-        else:
-            self.data_count = qs.count()
 
         # self.full_data = qs.values_list(*self.attr_list) # TODO : for export
         # TODO : check if same column_names in several databases can be an issue
@@ -101,33 +120,37 @@ class DataTablesServer(object):
         # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
         # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
         if len(self.dbColMap.databases) > 1:
-            data = qs.filter(database=ref_db)
+            full_data = qs.filter(database=ref_db)
             for db in [db for db in self.dbColMap.databases if db != ref_db]:
                 db_qs = qs.filter(database=db, ortho=OuterRef('ortho'))
                 # filter out words not present in other databases
-                data = data.filter(ortho__in=db_qs.values_list("ortho", flat=True))
+                full_data = full_data.filter(ortho__in=db_qs.values_list("ortho", flat=True))
                 # ref_db is the only one for which rows will not change. If we have more than one database, we annotate the queryset of ref_db to add columns from other databases.
-                data = data.annotate(
+                full_data = full_data.annotate(
                     **{f"{col.database.name}__{col.code}__cast":Subquery(db_qs.values(f"{col.database.name}__{col.code}__cast")[:1]) for col in cast_col_list if col.database == db}
                 )
-            self.data_count = data.count()
 
         else:
-            data = qs
+            full_data = qs
 
         # filter after grouping
-        if _filter:
+        if self._filter:
             if op == "or":
-                data = data.filter(
-                    reduce(operator.or_, _filter))
+                data = full_data.filter(
+                    reduce(operator.or_, self._filter))
             else:
-                data = data.filter(
-                    reduce(operator.and_, [x for x in _filter])
+                data = full_data.filter(
+                    reduce(operator.and_, [x for x in self._filter])
                 )
+        else:
+            data = full_data
+
         if sorting == "":
             sorting = "ortho"
         data = data.order_by('%s' % sorting)
-        len_data = data.count()
+
+        # Get count from cache
+        self.get_cache_data(ref_db, full_data, data)
 
         # Get min max post grouping to have less objects to aggregate
         self.get_min_max(qs, cast_col_list)
@@ -139,13 +162,13 @@ class DataTablesServer(object):
         # If index is in 20000 last ones, reverse queryset to get faster indexing. Inspired by : https://www.reddit.com/r/django/comments/4dn0mo/how_to_optimize_pagination_for_large_queryset/
         _index = int(pages.start)
         _nb_pages = int(pages.length - pages.start)
-        _end_index = min(_index + _nb_pages, len_data)
+        _end_index = min(_index + _nb_pages, self.filtered_data_count)
         PAGE_THRESHOLD = 20000
-        if len_data > PAGE_THRESHOLD * 2 and len_data - _index < PAGE_THRESHOLD:
+        if self.filtered_data_count > PAGE_THRESHOLD * 2 and self.filtered_data_count - _index < PAGE_THRESHOLD:
             reversed_data = data.order_by(f"-{sorting}")
             _old_index = _index
-            _index = len_data - _end_index
-            _end_index = len_data - _old_index
+            _index = self.filtered_data_count - _end_index
+            _end_index = self.filtered_data_count - _old_index
             reversed_data = reversed_data[_index:_end_index]
             data = reversed(reversed_data)
         else:
@@ -154,10 +177,6 @@ class DataTablesServer(object):
         self.result_data = data
 
         # length of filtered set
-        if _filter:
-            self.cardinality_filtered = len_data
-        else:
-            self.cardinality_filtered = len_data
         self.cardinality = pages.length - pages.start
 
     def filtering(self):

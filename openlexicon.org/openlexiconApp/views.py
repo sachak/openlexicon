@@ -39,11 +39,13 @@ def import_data(request):
         if len(data["data"]) > 0:
             model = data["data"][0]
             col_types = {}
+            cols = {}
             for key in model.keys():
                 if key != word_col:
                     col_filter = DatabaseColumn.objects.filter(database=db, code=key)
                     if not col_filter.exists():
                         col = DatabaseColumn.objects.create(database=db, code=key)
+                        cols[key] = col
                         # if we have info on column provided by col_file.json, we replace default values with the ones provided
                         if key in col_data:
                             for attr in ["name", "size", "type"]:
@@ -63,6 +65,12 @@ def import_data(request):
                     dbattr = "ortho"
                 elif col_types[attr] in [ColType.INT, ColType.FLOAT]: # remove all spaces from columns declared as int/float
                     itemAttr = itemAttr.replace(" ", "")
+                    if itemAttr != "":
+                        convertedItem = float(itemAttr)
+                        if cols[attr].min == None or convertedItem < float(cols[attr].min): # "" is considered inferior to "0" so we convert to float when doing comparison
+                            cols[attr].min = itemAttr
+                        if cols[attr].max == None or convertedItem > float(cols[attr].max):
+                            cols[attr].max = itemAttr
                 try:
                     setattr(dbObj, dbattr, itemAttr)
                     if attr != word_col:
@@ -73,6 +81,10 @@ def import_data(request):
             dbObj.jsonData = jsonDict
             dbObj.database = db
         DatabaseObject.objects.bulk_create(objs) # bulk to avoid multiple save requests
+        DatabaseColumn.objects.bulk_update(cols.values(), fields=["min", "max"])
+        # Update database number of rows
+        db.nbRows = DatabaseObject.objects.filter(database=db).count()
+        db.save()
         messages.success(request, ("Fichier importé !"))
     return render(request, 'importForm.html')
 

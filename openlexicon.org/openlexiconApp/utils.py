@@ -33,7 +33,7 @@ class DbColMap:
         col_name = col_elts[1]
         return db_name, col_name
 
-default_DbColList = [f"Lexique383__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']] # + [f"Voisins__{col_name}" for col_name in ["NbVoisOrth", "VoisOrth"]] #+ [f"Manulex-Ortho__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]] + [f"Manulex-Lemmes__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]]
+default_DbColList = [f"Lexique383__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']] + [f"Voisins__{col_name}" for col_name in ["VoisOrth"]] #+ [f"Manulex-Ortho__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]] + [f"Manulex-Lemmes__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]]
 
 try: default_db = Database.objects.get(name="Lexique383")
 except: default_db = Database.objects.none()

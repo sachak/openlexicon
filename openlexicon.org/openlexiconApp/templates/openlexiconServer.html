@@ -97,7 +97,7 @@
             scrollX: true,
             deferRender: true,
             orderClasses: false,
-            stateSave: true, // State saving - restore table state on page reload
+            // stateSave: true, // State saving - restore table state on page reload
             fixedColumns:true, // fix first column when scrolling right
             initComplete: function(settings, json) { // Add slider filters (needs to be done after table is initialized to get min/max slider values). Largely inspired by https://github.com/rstudio/DT/
                 $('#{{table_name}}_filterrow th').each(function (i) {
