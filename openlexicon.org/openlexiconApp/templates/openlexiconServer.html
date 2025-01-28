@@ -40,7 +40,8 @@
 <script>
     // https://datatables.net/faqs/index#speed
     var table;
-    const THRESHOLD = 1000 // 1 sec delay before considering input when typing in column filters
+    var manualSet = false; // boolean used to fire set only for second handle when setting noUislider with key input
+    const THRESHOLD = 500 // 500 ms delay before considering input when typing in column filters
     var timer;
     $(document).ready(function() {
         // Setup table header
@@ -102,11 +103,19 @@
             initComplete: function(settings, json) { // Add slider filters (needs to be done after table is initialized to get min/max slider values). Largely inspired by https://github.com/rstudio/DT/
                 $('#{{table_name}}_filterrow th').each(function (i) {
                     if (!$(this).hasClass("dt-type-numeric")){ // character
-                        $("#filterInput"+i).on('keyup', function (event) { // Search filter
-                            table
-                                .column($(this).data('index'))
-                                .search(this.value)
-                                .draw();
+                        $("#filterInput"+i).on('keyup', function (event) {
+                            if (timer) { // clear previous timer if there is one
+                               clearTimeout(timer);
+                            }
+                            let index = $(this).data('index');
+                            let value = this.value;
+                            timer = setTimeout(function() {
+                                // Search filter
+                                table
+                                    .column(index)
+                                    .search(value)
+                                    .draw();
+                            }, THRESHOLD);
                         });
                     }
                 });
@@ -175,10 +184,13 @@
                     $filterInput.val("")
                     values = ""; // set values to empty string to avoid searching for min/max values (which equals applying no filter)
                 }
-                table
-                    .column($filterInput.data('index'))
-                    .search(values)
-                    .draw();
+                if (!manualSet || handle == 1) {
+                    table
+                        .column($filterInput.data('index'))
+                        .search(values)
+                        .draw();
+                    manualSet = false;
+                }
             });
 
             $filterInput.on('keyup', function() {
@@ -199,6 +211,7 @@
                     }
                     if (isvalid) {
                         $filterInput.removeClass('is-invalid');
+                        manualSet = true;
                         filterSlider.noUiSlider.set(v);
                     }
                 }, THRESHOLD);
