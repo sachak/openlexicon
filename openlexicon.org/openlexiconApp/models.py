@@ -31,13 +31,15 @@ class Lang(models.TextChoices):
     MULT = "Multiple languages"
 
 class Database(models.Model):
+    id = models.BigIntegerField(primary_key=True, unique=True, db_index=True)
     name = models.CharField(max_length=50, unique=True)
     info = CKEditor5Field(blank=True, null=True) # for tooltip
     language = models.CharField(max_length=20, choices=Lang.choices, default=Lang.FR)
     nbRows = models.IntegerField(null=True)
 
 class DatabaseObject(models.Model):
-    database = models.ForeignKey(Database, on_delete=models.CASCADE, db_index=True)
+    id = models.BigIntegerField(primary_key=True, unique=True, db_index=True)
+    database = models.ForeignKey(Database, on_delete=models.CASCADE)
     ortho = models.CharField(max_length=50, verbose_name="Word")
     lemme = models.CharField(max_length=50, verbose_name="Lemme", null=True)
     cgram = models.CharField(max_length=20, verbose_name="Grammatical category", null=True)
@@ -47,7 +49,8 @@ class DatabaseObject(models.Model):
         unique_together = ('database', 'ortho', 'cgram', 'lemme',)
 
 class DatabaseColumn(models.Model):
-    database = models.ForeignKey(Database, on_delete=models.CASCADE, db_index=True)
+    id = models.BigIntegerField(primary_key=True, unique=True, db_index=True)
+    database = models.ForeignKey(Database, on_delete=models.CASCADE)
     code = models.CharField(max_length=50, verbose_name="Code")
     name = models.CharField(max_length=50, verbose_name="Nom")
     size = models.CharField(max_length=10, verbose_name="Taille", default=ColSize.MEDIUM)
