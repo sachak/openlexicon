@@ -61,30 +61,39 @@ class DataTablesServer(object):
     # https://dev.to/pragativerma18/django-caching-101-understanding-the-basics-and-beyond-49p
     def get_cache_data(self, ref_db, full_data, filtered_data):
         compareKeys = ["column_list", "_filter"]
-        longPattern = "&".join([f"{key}={str(getattr(self, key))}" for key in compareKeys])
-        pattern = base64.urlsafe_b64encode(hashlib.sha3_512(longPattern.encode()).digest()) # use hash to have smaller cache key
         cacheKeys = ["full_data_count", "filtered_data_count"]
-        data = cache.get(f"{pattern}_{cacheKeys[0]}")
-        if data is None: # set cache
-            is_default = self.column_list == default_DbColList and not self._filter
+        patterns = {}
+        cache_data = {}
+        is_default = None
+        for compareKey in compareKeys:
+            patterns[compareKey] = f"{compareKey}={str(getattr(self, compareKey))}"
+            if compareKey == "_filter": # filter combines column_list and _filter
+                patterns[compareKey] = "&".join([value for value in patterns.values()])
+        for idx, compareKey in enumerate(compareKeys):
+            pattern = base64.urlsafe_b64encode(hashlib.sha3_512(patterns[compareKey].encode()).digest()) # use hash to have smaller cache key
+            cacheKey = cacheKeys[idx]
+            cachePattern = f"{pattern}_{cacheKey}"
+            cache_data = cache.get(cachePattern)
+            if cache_data is None: # set cache
+                if is_default is None:
+                    is_default = self.column_list == default_DbColList and not self._filter
+                if cacheKey == "full_data_count":
+                    # Get count info
+                    if len(self.dbColMap.databases) == 1:
+                        self.full_data_count = ref_db.nbRows
+                    else:
+                        self.full_data_count = full_data.count()
+                elif cacheKey == "filtered_data_count": # filtered_data
+                    if not self._filter:
+                        self.filtered_data_count = self.full_data_count
+                    else:
+                        self.filtered_data_count = filtered_data.count()
 
-            # Get count info
-            if len(self.dbColMap.databases) == 1:
-                self.full_data_count = ref_db.nbRows
-            else:
-                self.full_data_count = full_data.count()
-            if not self._filter:
-                self.filtered_data_count = self.full_data_count
-            else:
-                self.filtered_data_count = filtered_data.count()
-
-            # Save count info in cache
-            for key in cacheKeys:
-                keyVal = getattr(self, key)
-                cache.set(f"{pattern}_{key}", keyVal, timeout=None if is_default else 3600)
-        else: # get cache
-            for key in cacheKeys:
-                setattr(self, key, cache.get(f"{pattern}_{key}"))
+                # Save count info in cache
+                keyVal = getattr(self, cacheKey)
+                cache.set(cachePattern, keyVal, timeout=None if is_default else 3600)
+            else: # get cache
+                setattr(self, cacheKey, cache.get(cachePattern))
 
     def get_min_max(self, qs, cast_col_list):
         # Format to {"database__colName": {"min": 0, "max":0}}
