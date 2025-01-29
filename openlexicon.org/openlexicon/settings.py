@@ -59,6 +59,14 @@ ROOT_URLCONF = 'openlexicon.urls'
 
 INTERNAL_IPS = ["127.0.0.1", SITE_URL]
 
+def custom_show_toolbar(request):
+    return True # Always show toolbar
+
+DEBUG_TOOLBAR_CONFIG = {
+    'SHOW_TOOLBAR_CALLBACK': custom_show_toolbar,
+    'RENDER_PANELS': None,
+}
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
