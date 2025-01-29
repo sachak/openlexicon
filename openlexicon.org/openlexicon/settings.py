@@ -59,8 +59,12 @@ ROOT_URLCONF = 'openlexicon.urls'
 
 INTERNAL_IPS = ["127.0.0.1", SITE_URL]
 
+# NOTE : does not work if several workers on /etc/systemd/system/gunicorn.service
 def custom_show_toolbar(request):
-    return True # Always show toolbar
+    if DEBUG:
+        return True
+    else:
+        return False
 
 DEBUG_TOOLBAR_CONFIG = {
     'SHOW_TOOLBAR_CALLBACK': custom_show_toolbar,
