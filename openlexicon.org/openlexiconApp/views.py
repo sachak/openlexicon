@@ -71,10 +71,10 @@ def import_data(request):
                             cols[attr].min = itemAttr
                         if cols[attr].max == None or convertedItem > float(cols[attr].max):
                             cols[attr].max = itemAttr
+                if attr != word_col:
+                    jsonDict[dbattr] = itemAttr
                 try:
                     setattr(dbObj, dbattr, itemAttr)
-                    if attr != word_col:
-                        jsonDict[dbattr] = itemAttr
                 except:
                     continue
             objs.append(dbObj)
