@@ -96,5 +96,4 @@ class ItemListView(ServerSideDatatableView):
         if column_list == []:
             column_list = default_DbColList
         self.dbColMap = DbColMap(column_list)
-        self.queryset = DatabaseObject.objects.filter(database__in=self.dbColMap.databases)
         return super(ItemListView, self).get(request, *args, **kwargs)

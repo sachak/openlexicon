@@ -9,7 +9,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast
 from collections import namedtuple
 import operator
-from .models import ExportMode, ColType
+from .models import ExportMode, ColType, DatabaseObject
 from .utils import default_db, default_DbColList
 from functools import reduce
 from pyexcelerate import Workbook
@@ -26,9 +26,10 @@ class Echo:
         return value
 
 class DataTablesServer(object):
-    def __init__(self, request, dbColMap, qs):
+    def __init__(self, request, dbColMap):
         self.dbColMap = dbColMap
         self.column_list = ["ortho"] + [f"{x}__cast" for x in self.dbColMap.column_list] # change pattern for column_name from database__col_name to database__col_name__cast
+        self.cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # for cast
         # values specified by the datatable for filtering, sorting, paging
         self.request_values = request.GET
         # results from the db
@@ -38,7 +39,6 @@ class DataTablesServer(object):
         # total in the table unfiltered
         self.cardinality = 0
         self.user = request.user
-        self.qs = qs
         self.run_queries()
 
     def output_result(self):
@@ -58,70 +58,23 @@ class DataTablesServer(object):
         output["min_max_dict"] = self.min_max_dict
         return output
 
-    # https://dev.to/pragativerma18/django-caching-101-understanding-the-basics-and-beyond-49p
-    def get_cache_data(self, ref_db, full_data, filtered_data):
-        compareKeys = ["column_list", "_filter"]
-        cacheKeys = ["full_data_count", "filtered_data_count"]
-        patterns = {}
-        cache_data = {}
-        is_default = None
-        for compareKey in compareKeys:
-            patterns[compareKey] = f"{compareKey}={str(getattr(self, compareKey))}"
-            if compareKey == "_filter": # filter combines column_list and _filter
-                patterns[compareKey] = "&".join([value for value in patterns.values()])
-        for idx, compareKey in enumerate(compareKeys):
-            pattern = base64.urlsafe_b64encode(hashlib.sha3_512(patterns[compareKey].encode()).digest()) # use hash to have smaller cache key
-            cacheKey = cacheKeys[idx]
-            cachePattern = f"{pattern}_{cacheKey}"
-            cache_data = cache.get(cachePattern)
-            if cache_data is None: # set cache
-                if is_default is None:
-                    is_default = self.column_list == default_DbColList and not self._filter
-                if cacheKey == "full_data_count":
-                    # Get count info
-                    if len(self.dbColMap.databases) == 1:
-                        self.full_data_count = ref_db.nbRows
-                    else:
-                        self.full_data_count = full_data.count()
-                elif cacheKey == "filtered_data_count": # filtered_data
-                    if not self._filter:
-                        self.filtered_data_count = self.full_data_count
-                    else:
-                        self.filtered_data_count = filtered_data.count()
-
-                # Save count info in cache
-                keyVal = getattr(self, cacheKey)
-                cache.set(cachePattern, keyVal, timeout=None if is_default else 3600)
-            else: # get cache
-                setattr(self, cacheKey, cache.get(cachePattern))
-
-    def get_min_max(self, qs, cast_col_list):
-        # Format to {"database__colName": {"min": 0, "max":0}}
-        self.min_max_dict = {}
-        for col in [col for col in cast_col_list if col.type != ColType.TEXT]:
-            self.min_max_dict[f"{col.database.name}__{col.code}"] = {"min": col.min, "max": col.max}
-
-    def run_queries(self):
-        # pages has 'start' and 'length' attributes
-        pages = self.paging()
-        # the term you entered into the datatable search
-        self._filter, op = self.filtering()
-        # the document field you chose to sort
-        sorting = self.sorting()
-        # custom filter
-        qs = self.qs
-
-        # Cast
-        cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # split to databasecolumn list
-        qs = qs.annotate( # Cast to Float or IntegerField
-            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), ColType.get_field_class(col.type)) for col in cast_col_list}
+    # Data gets annotated with casted cols (useful for Integer and Float fields, to be able to compare and sort correctly)
+    def annotate_cast(self, data, db = None):
+        return data.annotate(
+            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), ColType.get_field_class(col.type)) for col in self.cast_col_list if (True if db == None else col.database == db)}
         )
 
-        # Determine database of reference (ref_db) for count and column grouping.
-        ref_db = self.dbColMap.databases[0]
-        if len(self.dbColMap.databases) > 1:
-            if default_db in self.dbColMap.databases:
-                ref_db = default_db
+    # Data gets annotated with cols from other databases (to have all info on one row)
+    def annotate_subdb(self, data, db_qs, db):
+        return data.annotate(
+            **{f"{db.name}__{col.code}__cast":Subquery(db_qs.values(f"{db.name}__{col.code}__cast")[:1]) for col in self.cast_col_list if col.database == db}
+        )
+
+    def get_filtered_queryset(self):
+        qs = DatabaseObject.objects.filter(database__in=self.dbColMap.databases)
+
+        # Cast
+        qs = self.annotate_cast(qs)
 
         # self.full_data = qs.values_list(*self.attr_list) # TODO : for export
         # TODO : check if same column_names in several databases can be an issue
@@ -129,43 +82,124 @@ class DataTablesServer(object):
         # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
         # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
         if len(self.dbColMap.databases) > 1:
-            full_data = qs.filter(database=ref_db)
-            for db in [db for db in self.dbColMap.databases if db != ref_db]:
+            self.full_data = qs.filter(database=self.ref_db)
+            for db in [db for db in self.dbColMap.databases if db != self.ref_db]:
                 db_qs = qs.filter(database=db, ortho=OuterRef('ortho'))
                 # filter out words not present in other databases
-                full_data = full_data.filter(ortho__in=db_qs.values_list("ortho", flat=True))
+                self.full_data = self.full_data.filter(ortho__in=db_qs.values_list("ortho", flat=True))
                 # ref_db is the only one for which rows will not change. If we have more than one database, we annotate the queryset of ref_db to add columns from other databases.
-                full_data = full_data.annotate(
-                    **{f"{col.database.name}__{col.code}__cast":Subquery(db_qs.values(f"{col.database.name}__{col.code}__cast")[:1]) for col in cast_col_list if col.database == db}
-                )
-
+                self.full_data = self.annotate_subdb(self.full_data, db_qs, db)
         else:
-            full_data = qs
+            self.full_data = qs
 
         # filter after grouping
         if self._filter:
-            if op == "or":
-                data = full_data.filter(
+            if self._op == "or":
+                self.filtered_data = self.full_data.filter(
                     reduce(operator.or_, self._filter))
             else:
-                data = full_data.filter(
+                self.filtered_data = self.full_data.filter(
                     reduce(operator.and_, [x for x in self._filter])
                 )
         else:
-            data = full_data
+            self.filtered_data = self.full_data
 
-        if sorting == "":
-            sorting = "ortho"
-        data = data.order_by('%s' % sorting)
+        self.id_list = self.filtered_data.values_list("id", flat=True)
+
+    def get_cache_pattern(self, compareKey):
+        return f"{compareKey}={str(getattr(self, compareKey))}"
+
+    # https://dev.to/pragativerma18/django-caching-101-understanding-the-basics-and-beyond-49p
+    def get_cache_data(self):
+        compareKeys = ["_filter", "column_list"]
+        cacheKeysOrdered = ["id_list", "full_data_count", "filtered_data_count"] # We need to get them in this order because each one depends on the other
+        cacheKeys = {
+            cacheKeysOrdered[0]: compareKeys[0], # id_list filter
+            cacheKeysOrdered[2]: compareKeys[0], # filtered_data_count filter
+            cacheKeysOrdered[1]: compareKeys[1], # full_data_count column_list
+        }
+        patterns = {}
+        cache_data = {}
+        is_default = None
+        patterns["column_list"] = self.get_cache_pattern("column_list")
+        patterns["_filter"] = "&".join([patterns["column_list"], self.get_cache_pattern("_filter")])
+        listPattern = None
+        for cacheKey in cacheKeysOrdered:
+            pattern = base64.urlsafe_b64encode(hashlib.sha3_512(patterns[cacheKeys[cacheKey]].encode()).digest()) # use hash to have smaller cache key
+            cachePattern = f"{pattern}_{cacheKey}"
+            cache_data = cache.get(cachePattern)
+            if cache_data is None: # set cache
+                if is_default is None:
+                    is_default = self.column_list == default_DbColList and not self._filter
+                if cacheKey == "full_data_count":
+                    try:
+                        # Get count info
+                        if len(self.dbColMap.databases) == 1:
+                            self.full_data_count = self.ref_db.nbRows
+                        else:
+                            self.full_data_count = self.full_data.count()
+                    except: # in case we are too late to get full_data_count from cache (and not too late for id_list)
+                        self.full_data_count = self.ref_db.nbRows
+                elif cacheKey == "id_list":
+                    self.get_filtered_queryset()
+                elif cacheKey == "filtered_data_count":
+                    if not self._filter:
+                        self.filtered_data_count = self.full_data_count
+                    else:
+                        self.filtered_data_count = self.filtered_data.count()
+
+                # Save count info in cache
+                keyVal = getattr(self, cacheKey)
+                if cacheKey != "id_list":
+                    cache.set(cachePattern, keyVal, timeout=None if is_default else 3600)
+                else:
+                    listPattern = cachePattern # save list after we get count
+            else: # get cache
+                setattr(self, cacheKey, cache_data)
+                if cacheKey == "id_list":
+                    data = DatabaseObject.objects.filter(id__in=self.id_list)
+                    data = self.annotate_cast(data, self.ref_db)
+                    self.filtered_data = data
+                    if len(self.dbColMap.databases) > 1:
+                        for db in [db for db in self.dbColMap.databases if db != self.ref_db]:
+                            db_qs = DatabaseObject.objects.filter(database=db, ortho=OuterRef('ortho'))
+                            db_qs = self.annotate_cast(db_qs, db)
+                            self.filtered_data = self.annotate_subdb(self.filtered_data, db_qs, db)
+        if listPattern is not None: # need to set list
+            if self._filter:
+                self.id_list = list(self.id_list) # convert to full list of integers only if filtering (since caching is slow for big data, but filtering is even slower with jsonData)
+            cache.set(listPattern, self.id_list, timeout=None if is_default else 3600)
+
+    def get_min_max(self):
+        # Format to {"database__colName": {"min": 0, "max":0}}
+        self.min_max_dict = {}
+        for col in [col for col in self.cast_col_list if col.type != ColType.TEXT]:
+            self.min_max_dict[f"{col.database.name}__{col.code}"] = {"min": col.min, "max": col.max}
+
+    def run_queries(self):
+        # pages has 'start' and 'length' attributes
+        pages = self.paging()
+        # the term you entered into the datatable search
+        self._filter, self._op = self.filtering()
+        # the document field you chose to sort
+        self._sorting = self.sorting()
+        if self._sorting == "":
+            self._sorting = "ortho"
+
+        # Determine database of reference (ref_db) for count and column grouping.
+        self.ref_db = self.dbColMap.databases[0]
+        if len(self.dbColMap.databases) > 1:
+            if default_db in self.dbColMap.databases:
+                self.ref_db = default_db
 
         # Get count from cache
-        self.get_cache_data(ref_db, full_data, data)
+        self.get_cache_data()
 
         # Get min max post grouping to have less objects to aggregate
-        self.get_min_max(qs, cast_col_list)
+        self.get_min_max()
 
-        # get values
-        data = data.values("ortho", *[f"{col.database.name}__{col.code}__cast" for col in cast_col_list])
+        # Get values
+        self.filtered_data = self.filtered_data.values("ortho", *[f"{col.database.name}__{col.code}__cast" for col in self.cast_col_list])
 
         # Pagination
         # If index is in 20000 last ones, reverse queryset to get faster indexing. Inspired by : https://www.reddit.com/r/django/comments/4dn0mo/how_to_optimize_pagination_for_large_queryset/
@@ -174,13 +208,18 @@ class DataTablesServer(object):
         _end_index = min(_index + _nb_pages, self.filtered_data_count)
         PAGE_THRESHOLD = 20000
         if self.filtered_data_count > PAGE_THRESHOLD * 2 and self.filtered_data_count - _index < PAGE_THRESHOLD:
-            reversed_data = data.order_by(f"-{sorting}")
+            if self._sorting.startswith("-"):
+                reverse_order = self._sorting[1:]
+            else:
+                reverse_order = f"-{self._sorting}"
+            reversed_data = self.filtered_data.order_by(reverse_order)
             _old_index = _index
             _index = self.filtered_data_count - _end_index
             _end_index = self.filtered_data_count - _old_index
             reversed_data = reversed_data[_index:_end_index]
             data = reversed(reversed_data)
         else:
+            data = self.filtered_data.order_by('%s' % self._sorting)
             data = data[_index:_end_index]
 
         self.result_data = data
@@ -235,7 +274,6 @@ class DataTablesServer(object):
 
 
 class ServerSideDatatableView(View):
-    queryset = None
     dbColMap = None
     model = None
 
@@ -277,32 +315,8 @@ class ServerSideDatatableView(View):
         if export_mode != None and not request.GET.get("export_post"): # get ajax url for real export
             return JsonResponse({"url": request.build_absolute_uri()}, safe=False)
         table = DataTablesServer(
-            request, self.dbColMap, self.get_queryset())
+            request, self.dbColMap)
         if export_mode != None:
             return self.export(table, export_mode)
         else:
             return JsonResponse(table.output_result(), safe=False)
-
-    def get_queryset(self):
-        """
-        Return the list of items for this view.
-
-        The return value must be an iterable and may be an instance of
-        `QuerySet` in which case `QuerySet` specific behavior will be enabled.
-        """
-        if self.queryset is not None:
-            queryset = self.queryset
-            if isinstance(queryset, QuerySet):
-                queryset = queryset.all()
-        elif self.model is not None:
-            queryset = self.model._default_manager.all()
-        else:
-            raise ImproperlyConfigured(
-                "%(cls)s is missing a QuerySet. Define "
-                "%(cls)s.model, %(cls)s.queryset, or override "
-                "%(cls)s.get_queryset()." % {
-                    'cls': self.__class__.__name__
-                }
-            )
-
-        return queryset
