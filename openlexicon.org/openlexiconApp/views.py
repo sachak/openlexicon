@@ -10,10 +10,14 @@ import json
 import os
 
 # https://datatables.net/examples/data_sources/server_side.html
-def home(request):
+def home(request, col_list=[]):
     if request.method == "GET":
         # Get default database and columns for table header format
-        columns = dict(DbColMap(default_DbColList).column_dict) # make a copy of default dict
+        if col_list == []:
+            col_list = default_DbColList
+        else:
+            col_list = DbColMap.listify_string(col_list)
+        columns = dict(DbColMap(col_list).column_dict)
     return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': columns})
 
 @login_required
@@ -91,9 +95,7 @@ def import_data(request):
 # https://github.com/umesh-krishna/django_serverside_datatable/tree/master
 class ItemListView(ServerSideDatatableView):
     def get(self, request, *args, **kwargs):
-        column_list = kwargs.get('column_list', [])
-        # Populate column_list with default if no column_list provided
-        if column_list == []:
-            column_list = default_DbColList
+        column_list = kwargs.get('column_list') # column_list is provided by home view, we always have a columnçlist in ItemListView
+        column_list = column_list.split(",")
         self.dbColMap = DbColMap(column_list)
         return super(ItemListView, self).get(request, *args, **kwargs)

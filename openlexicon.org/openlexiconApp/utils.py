@@ -33,6 +33,16 @@ class DbColMap:
         col_name = col_elts[1]
         return db_name, col_name
 
+    @staticmethod
+    def listify_string(string):
+        return string.split(export_sep)
+
+    @staticmethod
+    def stringify_dict(col_dict):
+        return export_sep.join([f"{database.name}__{column.code}" for database, column_list in col_dict.items() for column in column_list])
+
+export_sep = ","
+
 default_DbColList = [f"Lexique383__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']] + [f"Voisins__{col_name}" for col_name in ["VoisOrth"]] #+ [f"Manulex-Ortho__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]] + [f"Manulex-Lemmes__{col_name}" for col_name in ["SYNT", "CP_F", "CP_D", "CP_U", "CP_SFI", "CE1_F", "CE1_SFI", "CE2-CM2_D", "CP-CM2_F"]]
 
 try: default_db = Database.objects.get(name="Lexique383")
