@@ -16,6 +16,7 @@ from pyexcelerate import Workbook
 import csv
 import os
 import io
+import itertools
 import base64, hashlib
 from openlexicon.render_data import num_queries
 
@@ -28,8 +29,8 @@ class Echo:
 class DataTablesServer(object):
     def __init__(self, request, dbColMap):
         self.dbColMap = dbColMap
-        self.column_list = ["ortho"] + [f"{x}__cast" for x in self.dbColMap.column_list] # change pattern for column_name from database__col_name to database__col_name__cast
         self.cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # for cast
+        self.column_list = ["ortho"] + [f"{col.database.name}__{col.code}__cast" for col in self.cast_col_list] # change pattern for column_name from database__col_name to database__col_name__cast
         # values specified by the datatable for filtering, sorting, paging
         self.request_values = request.GET
         # results from the db
@@ -42,6 +43,40 @@ class DataTablesServer(object):
         self.run_queries()
 
     def output_result(self):
+        # Get min max post grouping to have less objects to aggregate
+        self.get_min_max()
+
+        # Get values
+        filtered_values = self.filtered_data.values(*self.column_list)
+
+        # Pagination
+        # pages has 'start' and 'length' attributes
+        pages = self.paging()
+        # If index is in 20000 last ones, reverse queryset to get faster indexing. Inspired by : https://www.reddit.com/r/django/comments/4dn0mo/how_to_optimize_pagination_for_large_queryset/
+        _index = int(pages.start)
+        _nb_pages = int(pages.length - pages.start)
+        _end_index = min(_index + _nb_pages, self.filtered_data_count)
+        PAGE_THRESHOLD = 20000
+        if self.filtered_data_count > PAGE_THRESHOLD * 2 and self.filtered_data_count - _index < PAGE_THRESHOLD:
+            if self._sorting.startswith("-"):
+                reverse_order = self._sorting[1:]
+            else:
+                reverse_order = f"-{self._sorting}"
+            reversed_data = filtered_values.order_by(reverse_order)
+            _old_index = _index
+            _index = self.filtered_data_count - _end_index
+            _end_index = self.filtered_data_count - _old_index
+            reversed_data = reversed_data[_index:_end_index]
+            data = reversed(reversed_data)
+        else:
+            data = filtered_values.order_by('%s' % self._sorting)
+            data = data[_index:_end_index]
+
+        self.result_data = data
+
+        # length of filtered set
+        self.cardinality = pages.length - pages.start
+
         output = dict()
         # output['sEcho'] = str(int(self.request_values['sEcho']))
         output['iTotalRecords'] = str(self.full_data_count)
@@ -76,7 +111,6 @@ class DataTablesServer(object):
         # Cast
         qs = self.annotate_cast(qs)
 
-        # self.full_data = qs.values_list(*self.attr_list) # TODO : for export
         # TODO : check if same column_names in several databases can be an issue
         # Group if several databases
         # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
@@ -177,8 +211,6 @@ class DataTablesServer(object):
             self.min_max_dict[f"{col.database.name}__{col.code}"] = {"min": col.min, "max": col.max}
 
     def run_queries(self):
-        # pages has 'start' and 'length' attributes
-        pages = self.paging()
         # the term you entered into the datatable search
         self._filter, self._op = self.filtering()
         # the document field you chose to sort
@@ -194,38 +226,6 @@ class DataTablesServer(object):
 
         # Get count from cache
         self.get_cache_data()
-
-        # Get min max post grouping to have less objects to aggregate
-        self.get_min_max()
-
-        # Get values
-        self.filtered_data = self.filtered_data.values("ortho", *[f"{col.database.name}__{col.code}__cast" for col in self.cast_col_list])
-
-        # Pagination
-        # If index is in 20000 last ones, reverse queryset to get faster indexing. Inspired by : https://www.reddit.com/r/django/comments/4dn0mo/how_to_optimize_pagination_for_large_queryset/
-        _index = int(pages.start)
-        _nb_pages = int(pages.length - pages.start)
-        _end_index = min(_index + _nb_pages, self.filtered_data_count)
-        PAGE_THRESHOLD = 20000
-        if self.filtered_data_count > PAGE_THRESHOLD * 2 and self.filtered_data_count - _index < PAGE_THRESHOLD:
-            if self._sorting.startswith("-"):
-                reverse_order = self._sorting[1:]
-            else:
-                reverse_order = f"-{self._sorting}"
-            reversed_data = self.filtered_data.order_by(reverse_order)
-            _old_index = _index
-            _index = self.filtered_data_count - _end_index
-            _end_index = self.filtered_data_count - _old_index
-            reversed_data = reversed_data[_index:_end_index]
-            data = reversed(reversed_data)
-        else:
-            data = self.filtered_data.order_by('%s' % self._sorting)
-            data = data[_index:_end_index]
-
-        self.result_data = data
-
-        # length of filtered set
-        self.cardinality = pages.length - pages.start
 
     def filtering(self):
         # build your filter spec
@@ -278,32 +278,38 @@ class ServerSideDatatableView(View):
     model = None
 
     def export(self, table, mode):
-        qs = table.full_data
+        qs = table.filtered_data.values_list(*table.column_list).order_by('%s' % table._sorting) # for export
+
+        headers = [x.replace("__cast", "") for x in table.column_list]
         if mode == ExportMode.CSV:
             echo_buffer = Echo()
             csv_writer = csv.writer(echo_buffer)
 
             # By using a generator expression to write each row in the queryset python calculates each row as needed, rather than all at once.
             rows = (csv_writer.writerow(row) for row in qs)
+            rows = itertools.chain(f"{','.join(headers)}\n", rows)
 
             response = StreamingHttpResponse(
                 rows,
                 content_type="text/csv",
-                headers={"Content-Disposition": 'attachment; filename=Lexique.csv'}
+                headers={"Content-Disposition": 'attachment; filename=OpenLexicon.csv'}
             )
 
         # https://hakibenita.com/python-django-optimizing-excel-export
+        # https://github.com/kz26/PyExcelerate
         elif mode == ExportMode.EXCEL:
             stream = io.BytesIO()
 
             workbook = Workbook()
-            sheet = workbook.new_sheet("OpenLexicon", data= qs)
+
+            data = [headers] + list(qs)
+            sheet = workbook.new_sheet("OpenLexicon", data=data)
 
             workbook.save(stream)
             stream.seek(0)
             # TODO : try to make this work with StreamingHttpResponse
             response = HttpResponse(stream.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            response['Content-Disposition'] = 'attachment; filename=Lexique.xlsx'
+            response['Content-Disposition'] = 'attachment; filename=OpenLexicon.xlsx'
         else:
             raise Exception("Invalid export format")
 

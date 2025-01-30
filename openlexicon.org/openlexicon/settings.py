@@ -60,6 +60,7 @@ ROOT_URLCONF = 'openlexicon.urls'
 INTERNAL_IPS = ["127.0.0.1", SITE_URL]
 
 # NOTE : does not work if several workers on /etc/systemd/system/gunicorn.service
+# NOTE : if we put large data in cache (like a list of integers), it really really slows the rendering !!
 def custom_show_toolbar(request):
     if DEBUG:
         return True
