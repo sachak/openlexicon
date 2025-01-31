@@ -8,8 +8,10 @@ class DbColMap:
 
     # From column_list with pattern ["database__column1", "database__column2"], create column_dict with pattern {DatabaseObject: ["column1", "column2"]}
     def set_column_dict(self):
-        self.column_dict = {}
+        self.column_dict = {} # for datatable
+        self.string_column_dict = {} # for template
         last_db_name = None
+        self.databases = []
         for col in self.column_list:
             db_name, col_name = DbColMap.get_db_col_from_string(col)
             # Avoid making multiple requests to get same database
@@ -17,13 +19,22 @@ class DbColMap:
                 database = Database.objects.get(name=db_name)
                 last_db_name = db_name
             if database not in self.column_dict:
+                self.databases.append(database)
+                self.string_column_dict[db_name] = []
                 self.column_dict[database] = [col_name]
             else:
                 self.column_dict[database].append(col_name)
-        self.databases = list(self.column_dict.keys())
         # Get DatabaseColumn objects
         for db in self.databases:
-            self.column_dict[db] = DatabaseColumn.objects.filter(database=db, code__in=self.column_dict[db]).select_related("database")
+            column_queryset = DatabaseColumn.objects.filter(database=db, code__in=self.column_dict[db]).select_related("database")
+            self.string_column_dict[db.name] = []
+            self.column_dict[db] = []
+            for col in column_queryset:
+                col_dict = {}
+                for attr in ["code", "size", "type"]:
+                    col_dict[attr] = getattr(col, attr)
+                self.string_column_dict[db.name].append(col_dict)
+                self.column_dict[db].append(col)
 
     @staticmethod
     def get_db_col_from_string(string):
@@ -36,10 +47,6 @@ class DbColMap:
     @staticmethod
     def listify_string(string):
         return string.split(export_sep)
-
-    @staticmethod
-    def stringify_dict(col_dict):
-        return export_sep.join([f"{database.name}__{column.code}" for database, column_list in col_dict.items() for column in column_list])
 
 export_sep = ","
 

@@ -42,7 +42,6 @@ INSTALLED_APPS = [
     'debug_toolbar',
     'openlexiconApp.apps.OpenlexiconappConfig',
     'django_ckeditor_5',
-    'openlexiconApp.templatetags',
 ]
 
 MIDDLEWARE = [

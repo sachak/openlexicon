@@ -37,6 +37,9 @@ class Database(models.Model):
     language = models.CharField(max_length=20, choices=Lang.choices, default=Lang.FR)
     nbRows = models.IntegerField(null=True)
 
+    def __str__(self):
+        return self.name
+
 class DatabaseObject(models.Model):
     id = models.AutoField(primary_key=True, db_index=True)
     database = models.ForeignKey(Database, on_delete=models.CASCADE)
@@ -57,6 +60,9 @@ class DatabaseColumn(models.Model):
     type = models.CharField(max_length=10, verbose_name="Type de données", default=ColType.TEXT) # try to assume type if not given ?
     min = models.FloatField(null=True)
     max = models.FloatField(null=True)
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         unique_together = ('database', 'code',)

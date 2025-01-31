@@ -1,0 +1,70 @@
+<!-- TODO : hide sidebar on small screens (phone) ? Use classes : navbar-collapse collapse d-none -->
+<form id="filter_form" method="POST">
+    {% csrf_token %}
+    <div id="sidebar_filter" class="col p-0 text-white w-sidebar d-md-flex sidebar">
+        <!-- fixed sidebar -->
+        <div class="navbar-light w-sidebar">
+            {% for database, column_list in all_columns.items %}
+            <div> <!-- if we want only one dropdown open at any given time, add class "nav-menu" -->
+                <div class="nav-menu-text list-group-item list-group-item-action" id="submenu_{{database.id}}_head" onclick="menu_click(event)">
+                    <input type="checkbox" id="checkbox_db_{{database.id}}" name="{{database.id}}" class="database-checkbox" onclick="check_all(this)"/>
+                    <span class="sidebar-span">{{database}}</span>
+                    <span class="submenu-icon ml-auto"> <i class="fas"></i> </span>
+                </div>
+                <!-- Submenu area -->
+                <div id='submenu_{{database.id}}' class="collapse submenu-collapse">
+                    {% for column in column_list %}
+                    <div id='div_check_{{column.id}}' class="list-group-item list-group-item-action navbar-item-text">
+                        <input type="checkbox" id="checkbox_{{column.id}}" name="{{database.id}}" onclick="check_instance(this)"/>
+                        <label for="checkbox_{{column.id}}">{{column}}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</form>
+
+<script>
+    function reveal_menu(object){
+        let menu = $(object).parents('.nav-menu-text');
+        // If check all, open menu if not already the case
+        if ($(object).prop('checked') && !menu_is_open(menu)) {
+            open_menu(menu);
+        }
+    }
+
+    $('.nav-menu-text').each(function(){
+        // var state = localStorage.getItem($(this).prop('id'));
+        // if(state === 'expanded'){
+        if (false) {
+            expand_menu(this);
+        } else {
+            collapse_menu(this);
+        }
+    });
+
+    function check_all(object) {
+        $('input[name='+$(object).attr("name")+']').each(function(){
+            $(this).prop('checked', $(object).prop('checked'));
+        });
+        reveal_menu($(object));
+        // filter_callback();
+    }
+
+    function check_instance(object){
+        let database = $(object).attr("name");
+        let nb_checked = $('#submenu_'+database+' :input[name='+database+']:checked').length;
+        $("#checkbox_database_"+database).prop("indeterminate", false);
+        if (nb_checked == $('#submenu_'+database+' :input[name='+database+']').length) {
+            $("#checkbox_database_"+database).prop("checked", true);
+            reveal_menu($(object));
+        }else if (nb_checked == 0) {
+            $("#checkbox_database_"+database).prop("checked", false);
+        }else{
+            $("#checkbox_database_"+database).prop("indeterminate", true);
+        }
+        // filter_callback();
+    }
+</script>

@@ -11,14 +11,19 @@ import os
 
 # https://datatables.net/examples/data_sources/server_side.html
 def home(request, col_list=[]):
-    if request.method == "GET":
-        # Get default database and columns for table header format
-        if col_list == []:
-            col_list = default_DbColList
+    # Get default database and columns for table header format
+    if col_list == []:
+        col_list = default_DbColList
+    else:
+        col_list = DbColMap.listify_string(col_list)
+    all_columns = DatabaseColumn.objects.all().select_related("database")
+    all_columns_dict = {}
+    for col in all_columns:
+        if col.database not in all_columns_dict:
+            all_columns_dict[col.database] = [col]
         else:
-            col_list = DbColMap.listify_string(col_list)
-        columns = dict(DbColMap(col_list).column_dict)
-    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': columns})
+            all_columns_dict[col.database].append(col)
+    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': json.dumps(DbColMap(col_list).string_column_dict), 'all_columns': all_columns_dict})
 
 @login_required
 def import_data(request):

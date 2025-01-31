@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load extras %}
 
 <!-- add searchpanes for filters https://datatables.net/extensions/searchpanes/examples/performance/searchPanes50k.html -->
 
@@ -12,6 +11,7 @@
 <link type="text/css" href="{% static 'css/datatables/fixedColumns.dataTables-5.0.3.css' %}" rel="stylesheet">
 <link type="text/css" href="{% static 'css/datatables/dataTables.extra.css' %}" rel="stylesheet">
 <link type="text/css" href="{% static 'css/datatables/jquery.nouislider.min.css' %}" rel="stylesheet">
+<link type="text/css" href="{% static 'css/sidebar.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block extraheadjs %}
@@ -22,19 +22,24 @@
 <script type="application/javascript" src="{% static 'js/datatables/dataTables.fixedColumns-5.0.3.min.js' %}"></script>
 <script type="application/javascript" src="{% static 'js/datatables/fixedColumns.dataTables-5.0.3.min.js' %}"></script>
 <script type="application/javascript" src="{% static 'js/datatables/jquery.nouislider.min.js' %}"></script>
+<script type="application/javascript" src="{% static 'js/fontawesome.js' %}"></script>
+<script type="application/javascript" src="{% static 'js/sidebar.js' %}"></script>
 {% endblock %}
 
 {% block content %}
 {% csrf_token %}
-<table id="{{table_name}}" class="display nowrap" style="width: 100% !important">
-    <thead>
-        <tr id="datatable_header">
-            <th id="ortho_col" class="text large-col">ortho</th>
-        </tr>
-        <tr id="{{table_name}}_filterrow">
-        </tr>
-    </thead>
-</table>
+{% include 'sidebar.html' %}
+<div class="overflow-container">
+    <table id="{{table_name}}" class="display table-content nowrap">
+        <thead>
+            <tr id="datatable_header">
+                <th id="ortho_col" class="text large-col">ortho</th>
+            </tr>
+            <tr id="{{table_name}}_filterrow">
+            </tr>
+        </thead>
+    </table>
+</div>
 {% endblock %}
 
 {% block extrajavascript %}
@@ -44,15 +49,46 @@
     var manualSet = false; // boolean used to fire set only for second handle when setting noUislider with key input
     const THRESHOLD = 500 // 500 ms delay before considering input when typing in column filters
     var timer;
-    $(document).ready(function() {
+    let column_dict = {{columns | safe}};
+    let string_col_dict = stringify_dict(column_dict);
+
+    function stringify_dict(column_dict) {
+        final_string = null;
+        for (const [database, column_list] of Object.entries(column_dict)) {
+            col_array = [];
+            for (const col of column_list) {
+                col_array.push(database+"__"+col.code);
+            }
+            if (final_string == null) {
+                final_string = col_array.join(",");
+            }else{
+                final_string = [final_string, col_array.join(",")].join(",");
+            }
+        }
+        return final_string
+    }
+
+    function goExport(e, dt, button, config) {
+        // NOTE:  We first make an ajax call to get the string url with filters
+        // TODO : update columns value when clicking on sidebar filter
+        $.ajax({
+            url: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', string_col_dict),
+            data: Object.assign(table.ajax.params(), {"export_mode": button.text()}),
+            success: function(data) { // we call URL without ajax to export
+                window.location = data.url + "&export_post=1"
+            }
+        })
+    }
+
+    function set_table() {
         // Setup table header
         $dbHeader = $("#datatable_header")
-        {% for database, column_list in columns.items %}
-            {% for col in column_list %}
-                $colHeader = $("<th id='{{database.name}}__{{col.code}}' class='{{col.type}} {{col.size}}-col'>{{col.code}}</th>")
+        for (const [database, column_list] of Object.entries(column_dict)) {
+            for (const col of column_list) {
+                $colHeader = $("<th id='"+database+"__"+col.code+"' class='"+col.type+" "+col.size+"-col'>"+col.code+"</th>")
                 $dbHeader.append($colHeader);
-            {% endfor %}
-        {% endfor %}
+            }
+        }
 
         // Setup - add a text input to each column
         $('#{{table_name}} thead th').each(function (i) {
@@ -94,7 +130,7 @@
                 {text: 'EXCEL', action: goExport}
             ],
             serverSide: true, // https://datatables.net/examples/data_sources/server_side. With server-side processing enabled, all paging, searching, ordering actions that DataTables performs are handed off to a server where an SQL engine (or similar) can perform these actions on the large data set (after all, that's what the database engine is designed for!)
-            ajax: "{% url 'openlexiconApp:data' columns|stringify_dict %}",
+            ajax: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', string_col_dict),
             processing: true, // Enable the display of a 'processing' indicator when the table is being processed
             scrollX: true,
             deferRender: true,
@@ -133,19 +169,11 @@
         $(document).find('.dt-scroll').each(function() {
             $(this).css("overflow-x", "scroll");
         })
-    });
-
-    function goExport(e, dt, button, config) {
-        // NOTE:  We first make an ajax call to get the string url with filters
-        // TODO : update columns value when clicking on sidebar filter
-        $.ajax({
-            url: "{% url 'openlexiconApp:data' columns|stringify_dict %}",
-            data: Object.assign(table.ajax.params(), {"export_mode": button.text()}),
-            success: function(data) { // we call URL without ajax to export
-                window.location = data.url + "&export_post=1"
-            }
-        })
     }
+
+    $(document).ready(function() {
+        set_table();
+    });
 
     const compareArrays = (a, b) => {
         return JSON.stringify(a) === JSON.stringify(b);
