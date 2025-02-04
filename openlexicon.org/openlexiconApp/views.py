@@ -85,6 +85,8 @@ def import_data(request):
                             cols[attr].min = itemAttr
                         if cols[attr].max == None or convertedItem > float(cols[attr].max):
                             cols[attr].max = itemAttr
+                    else: # if string is "", we consider it to be None
+                        itemAttr = None
                 if attr != word_col:
                     jsonDict[dbattr] = itemAttr
                 try:
