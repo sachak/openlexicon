@@ -29,16 +29,7 @@
 {% block content %}
 {% csrf_token %}
 {% include 'sidebar.html' %}
-<div class="overflow-container">
-    <table id="{{table_name}}" class="display table-content nowrap">
-        <thead>
-            <tr id="datatable_header">
-                <th id="ortho_col" class="text large-col">ortho</th>
-            </tr>
-            <tr id="{{table_name}}_filterrow">
-            </tr>
-        </thead>
-    </table>
+<div id="datatable-div-container" class="overflow-container">
 </div>
 {% endblock %}
 
@@ -46,33 +37,28 @@
 <script>
     // https://datatables.net/faqs/index#speed
     var table;
+    var datatableContainer;
     var manualSet = false; // boolean used to fire set only for second handle when setting noUislider with key input
     const THRESHOLD = 500 // 500 ms delay before considering input when typing in column filters
     var timer;
+    var checkbox_ready = false;
     let column_dict = {{columns | safe}};
-    let string_col_dict = stringify_dict(column_dict);
+    let col_string = "{{col_string}}";
 
-    function stringify_dict(column_dict) {
-        final_string = null;
-        for (const [database, column_list] of Object.entries(column_dict)) {
-            col_array = [];
-            for (const col of column_list) {
-                col_array.push(database+"__"+col.code);
-            }
-            if (final_string == null) {
-                final_string = col_array.join(",");
-            }else{
-                final_string = [final_string, col_array.join(",")].join(",");
-            }
+    // Check cols on sidebar
+    for (const [database, column_list] of Object.entries(column_dict)) {
+        for (const col of column_list) {
+            // NOTE : we use document.getElementById instead of $("#id").click() because the last is called three times when combined with inline onclick (see this post: https://github.com/jquery/jquery/issues/4493)
+            document.getElementById("checkbox_col_"+col.id).click();
         }
-        return final_string
     }
+    checkbox_ready = true;
 
     function goExport(e, dt, button, config) {
         // NOTE:  We first make an ajax call to get the string url with filters
         // TODO : update columns value when clicking on sidebar filter
         $.ajax({
-            url: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', string_col_dict),
+            url: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', col_string),
             data: Object.assign(table.ajax.params(), {"export_mode": button.text()}),
             success: function(data) { // we call URL without ajax to export
                 window.location = data.url + "&export_post=1"
@@ -81,11 +67,22 @@
     }
 
     function set_table() {
+        // Init table
+        datatableContainer.innerHTML = `<table id="{{table_name}}" class="display table-content nowrap">
+            <thead>
+                <tr id="datatable_header">
+                    <th id="ortho_col" class="text large-col">ortho</th>
+                </tr>
+                <tr id="{{table_name}}_filterrow">
+                </tr>
+            </thead>
+        </table>`;
+
         // Setup table header
         $dbHeader = $("#datatable_header")
         for (const [database, column_list] of Object.entries(column_dict)) {
             for (const col of column_list) {
-                $colHeader = $("<th id='"+database+"__"+col.code+"' class='"+col.type+" "+col.size+"-col'>"+col.code+"</th>")
+                $colHeader = $("<th id='"+database+"__"+col.id+"' class='"+col.type+" "+col.size+"-col'>"+col.code+"</th>")
                 $dbHeader.append($colHeader);
             }
         }
@@ -130,7 +127,7 @@
                 {text: 'EXCEL', action: goExport}
             ],
             serverSide: true, // https://datatables.net/examples/data_sources/server_side. With server-side processing enabled, all paging, searching, ordering actions that DataTables performs are handed off to a server where an SQL engine (or similar) can perform these actions on the large data set (after all, that's what the database engine is designed for!)
-            ajax: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', string_col_dict),
+            ajax: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', col_string),
             processing: true, // Enable the display of a 'processing' indicator when the table is being processed
             scrollX: true,
             deferRender: true,
@@ -172,6 +169,7 @@
     }
 
     $(document).ready(function() {
+        datatableContainer = document.getElementById("datatable-div-container");
         set_table();
     });
 

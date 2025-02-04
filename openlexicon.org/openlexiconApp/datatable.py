@@ -208,7 +208,7 @@ class DataTablesServer(object):
         # Format to {"database__colName": {"min": 0, "max":0}}
         self.min_max_dict = {}
         for col in [col for col in self.cast_col_list if col.type != ColType.TEXT]:
-            self.min_max_dict[f"{col.database.name}__{col.code}"] = {"min": col.min, "max": col.max}
+            self.min_max_dict[f"{col.database.id}__{col.id}"] = {"min": col.min, "max": col.max}
 
     def run_queries(self):
         # the term you entered into the datatable search

@@ -10,20 +10,25 @@ import json
 import os
 
 # https://datatables.net/examples/data_sources/server_side.html
-def home(request, col_list=[]):
+def home(request, column_list=[]):
     # Get default database and columns for table header format
-    if col_list == []:
-        col_list = default_DbColList
+    if column_list == []:
+        column_list = default_DbColList
     else:
-        col_list = DbColMap.listify_string(col_list)
-    all_columns = DatabaseColumn.objects.all().select_related("database")
+        column_list = DbColMap.listify_string(column_list)
+    dbColMap = DbColMap(column_list)
+    # return updated column_dict to template when changing column selection
+    if request.method == 'POST':
+        return JsonResponse(json.dumps(dbColMap.string_column_dict), safe=False)
+    # Get
+    all_columns = DatabaseColumn.objects.all().select_related("database").order_by("database__name", "id")
     all_columns_dict = {}
     for col in all_columns:
         if col.database not in all_columns_dict:
             all_columns_dict[col.database] = [col]
         else:
             all_columns_dict[col.database].append(col)
-    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': json.dumps(DbColMap(col_list).string_column_dict), 'all_columns': all_columns_dict})
+    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': json.dumps(dbColMap.string_column_dict), 'col_string': dbColMap.col_string, 'all_columns': all_columns_dict})
 
 @login_required
 def import_data(request):

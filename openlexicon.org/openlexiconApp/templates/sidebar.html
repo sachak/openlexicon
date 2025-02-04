@@ -15,7 +15,7 @@
                 <div id='submenu_{{database.id}}' class="collapse submenu-collapse">
                     {% for column in column_list %}
                     <div id='div_check_{{column.id}}' class="list-group-item list-group-item-action navbar-item-text">
-                        <input type="checkbox" id="checkbox_{{column.id}}" name="{{database.id}}" onclick="check_instance(this)"/>
+                        <input type="checkbox" id="checkbox_col_{{column.id}}" name="{{database.id}}" onclick="check_instance(this);"/>
                         <label for="checkbox_{{column.id}}">{{column}}</label>
                     </div>
                     {% endfor %}
@@ -28,7 +28,10 @@
 
 <script>
     function reveal_menu(object){
-        let menu = $(object).parents('.nav-menu-text');
+        let menu = $(object).parents('.nav-menu-text'); // database checkbox
+        if (menu.prop("id") == undefined) { // column checkbox
+            menu = $(object).parents('.submenu-collapse').prev();
+        }
         // If check all, open menu if not already the case
         if ($(object).prop('checked') && !menu_is_open(menu)) {
             open_menu(menu);
@@ -45,26 +48,52 @@
         }
     });
 
+    function filter_callback() {
+        if (checkbox_ready) { // makes sure we do not trigger the ajax call if checkboxing results from initial selection of checkbox (on GET)
+            col_string = [];
+            {% for database, column_list in all_columns.items %}
+                {% for column in column_list %}
+                    if ($("#checkbox_col_{{column.id}}").prop("checked")) {
+                        col_string.push("{{database.id}}__{{column.id}}");
+                    }
+                {% endfor %}
+            {% endfor %}
+            col_string = col_string.join(",");
+            // Col ajax to get updated column_dict. TODO : do it in the template directly using all_columns to avoid doing another database request ?
+            $.ajax({
+                url: "{% url 'openlexiconApp:homeServer' 'STRING_PLACEHOLDER' %}".replace("STRING_PLACEHOLDER", col_string),
+                data: {csrfmiddlewaretoken:$("#filter_form").find('input[name=csrfmiddlewaretoken]').val()},
+                type: "POST",
+                success: function(data) {
+                    column_dict = JSON.parse(data);
+                    set_table();
+                },
+                error: function(data, textStatus, jqXHR) {}
+            });
+        }
+    }
+
     function check_all(object) {
         $('input[name='+$(object).attr("name")+']').each(function(){
             $(this).prop('checked', $(object).prop('checked'));
         });
         reveal_menu($(object));
-        // filter_callback();
+        filter_callback();
     }
 
     function check_instance(object){
         let database = $(object).attr("name");
         let nb_checked = $('#submenu_'+database+' :input[name='+database+']:checked').length;
-        $("#checkbox_database_"+database).prop("indeterminate", false);
+        $("#checkbox_db_"+database).prop("indeterminate", false);
         if (nb_checked == $('#submenu_'+database+' :input[name='+database+']').length) {
-            $("#checkbox_database_"+database).prop("checked", true);
+            $("#checkbox_db_"+database).prop("checked", true);
             reveal_menu($(object));
         }else if (nb_checked == 0) {
-            $("#checkbox_database_"+database).prop("checked", false);
+            $("#checkbox_db_"+database).prop("checked", false);
         }else{
-            $("#checkbox_database_"+database).prop("indeterminate", true);
+            $("#checkbox_db_"+database).prop("indeterminate", true);
+            reveal_menu($(object));
         }
-        // filter_callback();
+        filter_callback();
     }
 </script>
