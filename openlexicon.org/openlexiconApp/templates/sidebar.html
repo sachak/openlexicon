@@ -51,25 +51,23 @@
     function filter_callback() {
         if (checkbox_ready) { // makes sure we do not trigger the ajax call if checkboxing results from initial selection of checkbox (on GET)
             col_string = [];
+            column_dict = {};
+            database_order = [];
             {% for database, column_list in all_columns.items %}
                 {% for column in column_list %}
                     if ($("#checkbox_col_{{column.id}}").prop("checked")) {
                         col_string.push("{{database.id}}__{{column.id}}");
+                        json_key = {{database.id}};
+                        if (!column_dict.hasOwnProperty(json_key)) {
+                            column_dict[json_key] = [];
+                            database_order.push(json_key);
+                        }
+                        column_dict[json_key].push({id: {{column.id}}, code: "{{column.code}}", size: "{{column.size}}", type: "{{column.type}}"});
                     }
                 {% endfor %}
             {% endfor %}
             col_string = col_string.join(",");
-            // Col ajax to get updated column_dict. TODO : do it in the template directly using all_columns to avoid doing another database request ?
-            $.ajax({
-                url: "{% url 'openlexiconApp:homeServer' 'STRING_PLACEHOLDER' %}".replace("STRING_PLACEHOLDER", col_string),
-                data: {csrfmiddlewaretoken:$("#filter_form").find('input[name=csrfmiddlewaretoken]').val()},
-                type: "POST",
-                success: function(data) {
-                    column_dict = JSON.parse(data);
-                    set_table();
-                },
-                error: function(data, textStatus, jqXHR) {}
-            });
+            set_table();
         }
     }
 

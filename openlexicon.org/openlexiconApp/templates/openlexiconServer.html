@@ -44,6 +44,7 @@
     var checkbox_ready = false;
     let column_dict = {{columns | safe}};
     let col_string = "{{col_string}}";
+    let database_order = {{database_order | safe}};
 
     // Check cols on sidebar
     for (const [database, column_list] of Object.entries(column_dict)) {
@@ -80,9 +81,10 @@
 
         // Setup table header
         $dbHeader = $("#datatable_header")
-        for (const [database, column_list] of Object.entries(column_dict)) {
+        for (const database_id of database_order) { // we have separate array of database ids to keep database order as we want (order of json object keys is not preserved)
+            column_list = column_dict[database_id];
             for (const col of column_list) {
-                $colHeader = $("<th id='"+database+"__"+col.id+"' class='"+col.type+" "+col.size+"-col'>"+col.code+"</th>")
+                $colHeader = $("<th id='"+database_id+"__"+col.id+"' class='"+col.type+" "+col.size+"-col'>"+col.code+"</th>")
                 $dbHeader.append($colHeader);
             }
         }

@@ -30,7 +30,6 @@ class DbColMap:
         for db in self.databases:
             try:column_queryset = DatabaseColumn.objects.filter(database=db, id__in=self.column_dict[db]).select_related("database")
             except:column_queryset = DatabaseColumn.objects.filter(database=db, code__in=self.column_dict[db]).select_related("database")
-            column_queryset = column_queryset.order_by("database__name", "id")
             self.column_dict[db] = []
             for col in column_queryset:
                 col_dict = {}

@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
 from django.shortcuts import render
 from .datatable import ServerSideDatatableView
 from .models import DatabaseObject, Database, DatabaseColumn, ColType
@@ -17,10 +16,6 @@ def home(request, column_list=[]):
     else:
         column_list = DbColMap.listify_string(column_list)
     dbColMap = DbColMap(column_list)
-    # return updated column_dict to template when changing column selection
-    if request.method == 'POST':
-        return JsonResponse(json.dumps(dbColMap.string_column_dict), safe=False)
-    # Get
     all_columns = DatabaseColumn.objects.all().select_related("database").order_by("database__name", "id")
     all_columns_dict = {}
     for col in all_columns:
@@ -28,7 +23,7 @@ def home(request, column_list=[]):
             all_columns_dict[col.database] = [col]
         else:
             all_columns_dict[col.database].append(col)
-    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': json.dumps(dbColMap.string_column_dict), 'col_string': dbColMap.col_string, 'all_columns': all_columns_dict})
+    return render(request, 'openlexiconServer.html', {'table_name': settings.SITE_NAME, 'columns': json.dumps(dbColMap.string_column_dict), 'col_string': dbColMap.col_string, 'all_columns': all_columns_dict, "database_order": list(dbColMap.string_column_dict.keys())})
 
 @login_required
 def import_data(request):
