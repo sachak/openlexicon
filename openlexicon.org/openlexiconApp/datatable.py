@@ -29,6 +29,7 @@ class Echo:
 class DataTablesServer(object):
     def __init__(self, request, dbColMap):
         self.dbColMap = dbColMap
+        self.databases = self.dbColMap.databases # we place self.dbColMap.databases in self.databases so we can getattr databases easily when getting cache
         self.cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # for cast
         self.column_list = ["ortho"] + [f"{col.database.name}__{col.code}__cast" for col in self.cast_col_list] # change pattern for column_name from database__col_name to database__col_name__cast
         # values specified by the datatable for filtering, sorting, paging
@@ -106,7 +107,7 @@ class DataTablesServer(object):
         )
 
     def get_filtered_queryset(self):
-        qs = DatabaseObject.objects.filter(database__in=self.dbColMap.databases)
+        qs = DatabaseObject.objects.filter(database__in=self.databases)
 
         # Cast
         qs = self.annotate_cast(qs)
@@ -115,9 +116,9 @@ class DataTablesServer(object):
         # Group if several databases
         # https://stackoverflow.com/questions/68797164/how-to-merge-two-different-querysets-with-one-common-field-in-to-one-in-django
         # https://blog.gitguardian.com/10-tips-to-optimize-postgresql-queries-in-your-django-project/
-        if len(self.dbColMap.databases) > 1:
+        if len(self.databases) > 1:
             self.full_data = qs.filter(database=self.ref_db)
-            for db in [db for db in self.dbColMap.databases if db != self.ref_db]:
+            for db in [db for db in self.databases if db != self.ref_db]:
                 db_qs = qs.filter(database=db, ortho=OuterRef('ortho'))
                 # filter out words not present in other databases
                 self.full_data = self.full_data.filter(ortho__in=db_qs.values_list("ortho", flat=True))
@@ -145,7 +146,7 @@ class DataTablesServer(object):
 
     # https://dev.to/pragativerma18/django-caching-101-understanding-the-basics-and-beyond-49p
     def get_cache_data(self):
-        compareKeys = ["_filter", "column_list"]
+        compareKeys = ["_filter", "databases"]
         cacheKeysOrdered = ["id_list", "full_data_count", "filtered_data_count"] # We need to get them in this order because each one depends on the other
         cacheKeys = {
             cacheKeysOrdered[0]: compareKeys[0], # id_list filter
@@ -155,8 +156,8 @@ class DataTablesServer(object):
         patterns = {}
         cache_data = {}
         is_default = None
-        patterns["column_list"] = self.get_cache_pattern("column_list")
-        patterns["_filter"] = "&".join([patterns["column_list"], self.get_cache_pattern("_filter")])
+        patterns["databases"] = self.get_cache_pattern("databases")
+        patterns["_filter"] = "&".join([patterns["databases"], self.get_cache_pattern("_filter")])
         listPattern = None
         for cacheKey in cacheKeysOrdered:
             pattern = base64.urlsafe_b64encode(hashlib.sha3_512(patterns[cacheKeys[cacheKey]].encode()).digest()) # use hash to have smaller cache key
@@ -168,7 +169,7 @@ class DataTablesServer(object):
                 if cacheKey == "full_data_count":
                     try:
                         # Get count info
-                        if len(self.dbColMap.databases) == 1:
+                        if len(self.databases) == 1:
                             self.full_data_count = self.ref_db.nbRows
                         else:
                             self.full_data_count = self.full_data.count()
@@ -194,8 +195,8 @@ class DataTablesServer(object):
                     data = DatabaseObject.objects.filter(id__in=self.id_list)
                     data = self.annotate_cast(data, self.ref_db)
                     self.filtered_data = data
-                    if len(self.dbColMap.databases) > 1:
-                        for db in [db for db in self.dbColMap.databases if db != self.ref_db]:
+                    if len(self.databases) > 1:
+                        for db in [db for db in self.databases if db != self.ref_db]:
                             db_qs = DatabaseObject.objects.filter(database=db, ortho=OuterRef('ortho'))
                             db_qs = self.annotate_cast(db_qs, db)
                             self.filtered_data = self.annotate_subdb(self.filtered_data, db_qs, db)
@@ -219,9 +220,9 @@ class DataTablesServer(object):
             self._sorting = "ortho"
 
         # Determine database of reference (ref_db) for count and column grouping.
-        self.ref_db = self.dbColMap.databases[0]
-        if len(self.dbColMap.databases) > 1:
-            if default_db in self.dbColMap.databases:
+        self.ref_db = self.databases[0]
+        if len(self.databases) > 1:
+            if default_db in self.databases:
                 self.ref_db = default_db
 
         # Get count from cache
