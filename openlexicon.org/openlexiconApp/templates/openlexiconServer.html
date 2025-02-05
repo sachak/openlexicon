@@ -46,20 +46,29 @@
     let col_string = "{{col_string}}";
     let database_order = {{database_order | safe}};
 
-    // Check cols on sidebar
-    for (const [database, column_list] of Object.entries(column_dict)) {
-        for (const col of column_list) {
-            // NOTE : we use document.getElementById instead of $("#id").click() because the last is called three times when combined with inline onclick (see this post: https://github.com/jquery/jquery/issues/4493)
-            document.getElementById("checkbox_col_"+col.id).click();
+    simulate_click();
+
+    function simulate_click() {
+        checkbox_ready = false;
+        // Check cols on sidebar
+        for (const [database, column_list] of Object.entries(column_dict)) {
+            for (const col of column_list) {
+                // NOTE : we use document.getElementById instead of $("#id").click() because the last is called three times when combined with inline onclick (see this post: https://github.com/jquery/jquery/issues/4493)
+                document.getElementById("checkbox_col_"+col.id).click();
+            }
         }
+        checkbox_ready = true;
     }
-    checkbox_ready = true;
+
+    function getAjaxUrl() {
+        return "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace("COL_PLACEHOLDER", col_string);
+    }
 
     function goExport(e, dt, button, config) {
         // NOTE:  We first make an ajax call to get the string url with filters
         // TODO : update columns value when clicking on sidebar filter
         $.ajax({
-            url: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', col_string),
+            url: getAjaxUrl(),
             data: Object.assign(table.ajax.params(), {"export_mode": button.text()}),
             success: function(data) { // we call URL without ajax to export
                 window.location = data.url + "&export_post=1"
@@ -129,7 +138,7 @@
                 {text: 'EXCEL', action: goExport}
             ],
             serverSide: true, // https://datatables.net/examples/data_sources/server_side. With server-side processing enabled, all paging, searching, ordering actions that DataTables performs are handed off to a server where an SQL engine (or similar) can perform these actions on the large data set (after all, that's what the database engine is designed for!)
-            ajax: "{% url 'openlexiconApp:data' 'COL_PLACEHOLDER' %}".replace('COL_PLACEHOLDER', col_string),
+            ajax: getAjaxUrl(),
             processing: true, // Enable the display of a 'processing' indicator when the table is being processed
             scrollX: true,
             deferRender: true,

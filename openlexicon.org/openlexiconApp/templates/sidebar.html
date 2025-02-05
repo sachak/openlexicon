@@ -50,24 +50,31 @@
 
     function filter_callback() {
         if (checkbox_ready) { // makes sure we do not trigger the ajax call if checkboxing results from initial selection of checkbox (on GET)
-            col_string = [];
-            column_dict = {};
-            database_order = [];
+            let new_col_string = [];
+            let new_column_dict = {};
+            let new_database_order = [];
             {% for database, column_list in all_columns.items %}
                 {% for column in column_list %}
                     if ($("#checkbox_col_{{column.id}}").prop("checked")) {
-                        col_string.push("{{database.id}}__{{column.id}}");
+                        new_col_string.push("{{database.id}}__{{column.id}}");
                         json_key = {{database.id}};
-                        if (!column_dict.hasOwnProperty(json_key)) {
-                            column_dict[json_key] = [];
-                            database_order.push(json_key);
+                        if (!new_column_dict.hasOwnProperty(json_key)) {
+                            new_column_dict[json_key] = [];
+                            new_database_order.push(json_key);
                         }
-                        column_dict[json_key].push({id: {{column.id}}, code: "{{column.code}}", size: "{{column.size}}", type: "{{column.type}}"});
+                        new_column_dict[json_key].push({id: {{column.id}}, code: "{{column.code}}", size: "{{column.size}}", type: "{{column.type}}"});
                     }
                 {% endfor %}
             {% endfor %}
-            col_string = col_string.join(",");
-            set_table();
+            if (new_col_string.length != 0)  { // need at least one column selected
+                col_string = new_col_string.join(",");
+                column_dict = new_column_dict;
+                database_order = new_database_order;
+                set_table();
+            } else {
+                alert("We can't let you deselect all columns !");
+                simulate_click();
+            }
         }
     }
 
