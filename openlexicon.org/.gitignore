@@ -35,4 +35,4 @@ Pipfile.lock
 
 static/*
 openlexicon/static/*.json
-openlexicon/static/*.tsv
+openlexicon/static/*/*.json

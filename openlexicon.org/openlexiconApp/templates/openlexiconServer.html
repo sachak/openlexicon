@@ -46,15 +46,17 @@
     let col_string = "{{col_string}}";
     let database_order = {{database_order | safe}};
 
-    simulate_click();
+    check_columns();
 
-    function simulate_click() {
+    function check_columns() {
         checkbox_ready = false;
         // Check cols on sidebar
         for (const [database, column_list] of Object.entries(column_dict)) {
             for (const col of column_list) {
                 // NOTE : we use document.getElementById instead of $("#id").click() because the last is called three times when combined with inline onclick (see this post: https://github.com/jquery/jquery/issues/4493)
-                document.getElementById("checkbox_col_"+col.id).click();
+                let checkbox = document.getElementById("checkbox_col_"+col.id);
+                checkbox.checked = true;
+                check_instance(checkbox);
             }
         }
         checkbox_ready = true;
@@ -166,6 +168,10 @@
                 });
                 setSliders(json.min_max_dict);
             }
+        });
+
+        table.ready(function() {
+            handle_checkbox_disable(false);
         });
 
         // remove the overflow: hidden attribute of the scrollHead (otherwise the scrolling table body obscures the filters if scrollX is enabled)

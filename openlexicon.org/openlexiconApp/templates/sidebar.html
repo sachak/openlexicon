@@ -15,7 +15,7 @@
                 <div id='submenu_{{database.id}}' class="collapse submenu-collapse">
                     {% for column in column_list %}
                     <div id='div_check_{{column.id}}' class="list-group-item list-group-item-action navbar-item-text">
-                        <input type="checkbox" id="checkbox_col_{{column.id}}" name="{{database.id}}" onclick="check_instance(this);"/>
+                        <input type="checkbox" id="checkbox_col_{{column.id}}" name="{{database.id}}" onclick="check_instance(this);" disabled/>
                         <label for="checkbox_col_{{column.id}}" style="margin-bottom:0">{{column}}</label>
                     </div>
                     {% endfor %}
@@ -48,8 +48,16 @@
         }
     });
 
+    function handle_checkbox_disable(bool) {
+        $("#sidebar_filter").find('input').each(function () {
+             $(this).prop('disabled', bool);
+         });
+    }
+
     function filter_callback() {
         if (checkbox_ready) { // makes sure we do not trigger the ajax call if checkboxing results from initial selection of checkbox (on GET)
+            // disable checkbox while we work
+            handle_checkbox_disable(true);
             let new_col_string = [];
             let new_column_dict = {};
             let new_database_order = [];
@@ -73,7 +81,8 @@
                 set_table();
             } else {
                 alert("We can't let you deselect all columns !");
-                simulate_click();
+                check_columns();
+                handle_checkbox_disable(false);
             }
         }
     }
