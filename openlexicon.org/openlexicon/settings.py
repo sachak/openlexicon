@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 
 import os
 from pathlib import Path
-from openlexicon.prod_base_settings import db_pass, secret_key #passmail
+from openlexicon.prod_base_settings import *
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,9 +22,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: don't run with debug turned on in production!
-LOG_LEVEL = 1
-DEBUG = False
-PRODUCTION = True
+LOG_LEVEL = log_level
+DEBUG = debug
+PRODUCTION = production
 
 #SITE_URL = "openlexicon.org"
 SITE_URL = "5.39.73.115"
@@ -62,10 +62,7 @@ INTERNAL_IPS = ["127.0.0.1", SITE_URL]
 # NOTE : does not work if several workers on /etc/systemd/system/gunicorn.service
 # NOTE : if we put large data in cache (like a list of integers), it really really slows the rendering !!
 def custom_show_toolbar(request):
-    if DEBUG:
-        return True
-    else:
-        return False
+    return show_toolbar
 
 DEBUG_TOOLBAR_CONFIG = {
     'SHOW_TOOLBAR_CALLBACK': custom_show_toolbar,
