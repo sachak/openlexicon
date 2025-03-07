@@ -21,7 +21,7 @@ class ColType(models.TextChoices):
             return models.FloatField()
 
 class ExportMode(models.TextChoices):
-    CSV = "CSV"
+    TSV = "TSV"
     EXCEL = "EXCEL"
 
 class Lang(models.TextChoices):

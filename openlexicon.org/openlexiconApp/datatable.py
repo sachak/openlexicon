@@ -282,18 +282,19 @@ class ServerSideDatatableView(View):
         qs = table.filtered_data.values_list(*table.column_list).order_by('%s' % table._sorting) # for export
 
         headers = [x.replace("__cast", "") for x in table.column_list]
-        if mode == ExportMode.CSV:
+        if mode == ExportMode.TSV:
             echo_buffer = Echo()
-            csv_writer = csv.writer(echo_buffer)
+            delimiter = "\t"
+            csv_writer = csv.writer(echo_buffer, delimiter=delimiter)
 
             # By using a generator expression to write each row in the queryset python calculates each row as needed, rather than all at once.
             rows = (csv_writer.writerow(row) for row in qs)
-            rows = itertools.chain(f"{','.join(headers)}\n", rows)
+            rows = itertools.chain(f"{delimiter.join(headers)}\n", rows)
 
             response = StreamingHttpResponse(
                 rows,
-                content_type="text/csv",
-                headers={"Content-Disposition": 'attachment; filename=OpenLexicon.csv'}
+                content_type="text/tab-separated-values",
+                headers={"Content-Disposition": 'attachment; filename=OpenLexicon.tsv'}
             )
 
         # https://hakibenita.com/python-django-optimizing-excel-export
