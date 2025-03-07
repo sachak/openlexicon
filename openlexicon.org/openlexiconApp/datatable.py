@@ -237,7 +237,7 @@ class DataTablesServer(object):
             for i in range(len(self.column_list)):
                 if self.request_values['columns[%d][searchable]' % i] == 'true':
                     filter.append(
-                        Q(**{'%s__icontains' % self.column_list[i]: self.request_values['search[value]']}))
+                        Q(**{'%s__regex' % self.column_list[i]: self.request_values['search[value]']}))
         # search for each column (column search field)
         else:
             op = "and"
@@ -245,7 +245,7 @@ class DataTablesServer(object):
                 column_list = self.request_values.getlist(f'columns[{i}][search][value][]')
                 col_elt = self.request_values.get(f'columns[{i}][search][value]')
                 if (col_elt and col_elt != ""): # characters
-                    filter.append((f"{self.column_list[i]}__icontains", col_elt))
+                    filter.append((f"{self.column_list[i]}__regex", col_elt))
                 elif (column_list and len(column_list) == 2) : # numbers. WARNING : range does not work with JSONField on SQLite. It works with Postgresql. We need to use cast for numbers to be considered as such and not as text.
                     filter.append((f"{self.column_list[i]}__range", column_list))
         q_list = []
