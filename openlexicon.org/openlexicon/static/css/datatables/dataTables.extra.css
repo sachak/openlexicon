@@ -9,3 +9,7 @@
 .small-col {
     min-width: 70px;
 }
+
+.table-filter.is-invalid {
+    background-image: none !important;
+}
