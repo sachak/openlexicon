@@ -35,6 +35,11 @@
 
 {% block extrajavascript %}
 <script>
+    // clear all localStorage variables on load (for table filter/ordering)
+    window.onload = function() {
+        window.localStorage.clear();
+    }
+
     // https://datatables.net/faqs/index#speed
     var table;
     var datatableContainer;
@@ -78,7 +83,7 @@
         })
     }
 
-    function set_table() {
+    function set_table(redraw) { // if redraw is true, we are redrawing table after changing column selection. So we need to reapply filters and ordering.
         // Init table
         datatableContainer.innerHTML = `<table id="{{table_name}}" class="display table-content nowrap">
             <thead>
@@ -101,9 +106,34 @@
         }
 
         // Setup - add a text input to each column
+        // Get back filter columns
+        let searchCols = [];
+        let localStorageToKeep = {};
+        // Get back ordering
+        let ordering = null;
+        let tableOrdering = [0, "asc"]; // default sort order is ortho
+        if (redraw && localStorage.getItem("ordering") != null) {
+            ordering = localStorage["ordering"].split(",");
+        }
         $('#{{table_name}} thead th').each(function (i) {
             dataType = $(this).attr("class");
-            $("#{{table_name}}_filterrow").append('<th class="'+ dataType +'"><div tabindex="0" id="filterDiv'+i+'" class="form-group" style="margin-bottom: auto; position:relative"><input id="filterInput'+i+'" type="text" placeholder="All" class="form-control" data-index="' + i + '" /></div></th>');
+            // get filter value to redraw after new column selection
+            let $filterVal = redraw ? localStorage.getItem($(this).attr("id")) : null;
+            // add filter value to table initial filters.
+            // TODO : better handle int/float values to avoid depending on input notation (...).
+            // TODO handle regex : { search: '^[0-9]', regex: true }
+            if (ordering != null && $(this).attr("id") == ordering[0]) {
+                localStorageToKeep["ordering"] = ordering;
+                tableOrdering = [i, ordering[1]];
+            }
+            if ($filterVal != null) {
+                localStorageToKeep[$(this).attr("id")] = $filterVal;
+                searchCols[i] = { search: ($(this).hasClass("int") || $(this).hasClass("float")) ? $filterVal.split(" ... ") : $filterVal };
+            } else {
+                searchCols[i] = null;
+                $filterVal = '';
+            }
+            $("#{{table_name}}_filterrow").append('<th class="'+ dataType +'"><div tabindex="0" id="filterDiv'+i+'" class="form-group" style="margin-bottom: auto; position:relative"><input id="filterInput'+i+'" value="' + $filterVal + '" type="text" placeholder="All" class="form-control" data-index="' + i + '" /></div></th>');
 
             if ($(this).hasClass("int") || $(this).hasClass("float")) {
                 let $input = $("#filterInput"+i);
@@ -124,6 +154,12 @@
                 })
             }
         });
+
+        // NOTE : clear all local storage except for columns that are still shown after redraw. This clears filters for columns that are not currently shown, so if we select them back, their filters will not be reapplied.
+        window.localStorage.clear();
+        for (const storageKey in localStorageToKeep) {
+            localStorage[storageKey] = localStorageToKeep[storageKey];
+        }
 
         table = $('#{{table_name}}').DataTable({
             orderCellsTop: true, // sorting is assigned to top row (not to filterrow)
@@ -152,15 +188,18 @@
                   delete data.search.regex;
                 }
             },
+            searchCols: searchCols,
             processing: true, // Enable the display of a 'processing' indicator when the table is being processed
             scrollX: true,
             deferRender: true,
             orderClasses: false,
+            order: [tableOrdering],
             // stateSave: true, // State saving - restore table state on page reload
             fixedColumns:true, // fix first column when scrolling right
             initComplete: function(settings, json) { // Add slider filters (needs to be done after table is initialized to get min/max slider values). Largely inspired by https://github.com/rstudio/DT/
                 $('#{{table_name}}_filterrow th').each(function (i) {
                     if (!$(this).hasClass("dt-type-numeric")){ // character
+                        let $column_id = $("th[data-dt-column='"+i+"']").attr("id");
                         $("#filterInput"+i).on('keyup', function (event) {
                             if (timer) { // clear previous timer if there is one
                                clearTimeout(timer);
@@ -173,6 +212,7 @@
                                     .column(index)
                                     .search(value)
                                     .draw();
+                                localStorage[$column_id] = value;
                             }, THRESHOLD);
                         });
                     }
@@ -184,6 +224,16 @@
         table.ready(function() {
             handle_checkbox_disable(false);
         });
+
+        table.on( 'order', function (e, settings, ordArr) {
+            if (ordArr.length > 0) {
+                let ordering = ordArr[0];
+                let $column_id = $("th[data-dt-column='"+ ordering.col+ "']").attr("id");
+                localStorage["ordering"] = [$column_id, ordering.dir];
+            }else if (localStorage.getItem("ordering") != null) { // delete ordering from localStorage if no ordering
+                localStorage.removeItem("ordering");
+            }
+        } );
 
         // remove the overflow: hidden attribute of the scrollHead (otherwise the scrolling table body obscures the filters if scrollX is enabled)
         // The workaround and the discussion from https://github.com/rstudio/DT/issues/554#issuecomment-518007347
@@ -198,7 +248,7 @@
 
     $(document).ready(function() {
         datatableContainer = document.getElementById("datatable-div-container");
-        set_table();
+        set_table(false);
     });
 
     const compareArrays = (a, b) => {
@@ -246,6 +296,7 @@
                         .search(values)
                         .draw();
                     manualSet = false;
+                    localStorage[id] = $filterInput.val();
                 }
             });
 
