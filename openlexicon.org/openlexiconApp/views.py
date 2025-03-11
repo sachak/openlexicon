@@ -63,7 +63,6 @@ def import_data(request):
                     else:
                         tags.append(tag_filter[0])
                 # Delete old many to many tags and save new ones
-                # TODO : delete tags with no relation to database left
                 save_many_relations("tags", db, tags)
             elif key != "champs oblig":
                 setattr(db, key, database_info[key])

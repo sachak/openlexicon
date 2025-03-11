@@ -96,7 +96,7 @@ def load_tsv_file(tsv_file):
     chardet_data = chardet.detect(rawdata)
     encoding = chardet_data["encoding"]
     enc_confidence = chardet_data["confidence"]
-    default_encoding = "latin1"
+    default_encoding = "utf-8"
 
     if encoding != default_encoding:
         # TODO : return error
@@ -108,10 +108,10 @@ def load_tsv_file(tsv_file):
             # go back to file first row to read again and decode
             tsv_file.seek(0)
             tsv_file = tsv_file.read().decode(encoding)
-            df = pd.read_csv(StringIO(tsv_file), sep='\t', keep_default_na=False, na_values=[''], encoding=default_encoding)
+            df = pd.read_csv(StringIO(tsv_file), sep='\t', keep_default_na=False, na_values=[''])
     else:
         tsv_file.seek(0)
-        df = pd.read_csv(tsv_file, sep="\t", keep_default_na=False, na_values=[''], encoding=default_encoding)
+        df = pd.read_csv(tsv_file, sep="\t", keep_default_na=False, na_values=[''])
     # Remove spaces from cells with numbers only
     for col in list(df.columns):
         df[col] = df[col].apply(remove_spaces)
