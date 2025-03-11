@@ -31,7 +31,7 @@ class DataTablesServer(object):
         self.dbColMap = dbColMap
         self.databases = self.dbColMap.databases # we place self.dbColMap.databases in self.databases so we can getattr databases easily when getting cache
         self.cast_col_list = [column for column_list in self.dbColMap.column_dict.values() for column in column_list] # for cast
-        self.column_list = ["ortho"] + [f"{col.database.name}__{col.code}__cast" for col in self.cast_col_list] # change pattern for column_name from database__col_name to database__col_name__cast
+        self.column_list = ["ortho"] + [f"{col.database.code}__{col.code}__cast" for col in self.cast_col_list] # change pattern for column_name from database__col_name to database__col_name__cast
         # values specified by the datatable for filtering, sorting, paging
         self.request_values = request.GET
         # results from the db
@@ -97,13 +97,13 @@ class DataTablesServer(object):
     # Data gets annotated with casted cols (useful for Integer and Float fields, to be able to compare and sort correctly)
     def annotate_cast(self, data, db = None):
         return data.annotate(
-            **{f"{col.database.name}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), ColType.get_field_class(col.type)) for col in self.cast_col_list if (True if db == None else col.database == db)}
+            **{f"{col.database.code}__{col.code}__cast":Cast(KeyTextTransform(col.code, "jsonData"), ColType.get_field_class(col.type)) for col in self.cast_col_list if (True if db == None else col.database == db)}
         )
 
     # Data gets annotated with cols from other databases (to have all info on one row)
     def annotate_subdb(self, data, db_qs, db):
         return data.annotate(
-            **{f"{db.name}__{col.code}__cast":Subquery(db_qs.values(f"{db.name}__{col.code}__cast")[:1]) for col in self.cast_col_list if col.database == db}
+            **{f"{db.code}__{col.code}__cast":Subquery(db_qs.values(f"{db.code}__{col.code}__cast")[:1]) for col in self.cast_col_list if col.database == db}
         )
 
     def get_filtered_queryset(self):

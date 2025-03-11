@@ -37,6 +37,7 @@ class Tag(models.Model):
 
 class Database(models.Model):
     id = models.AutoField(primary_key=True, db_index=True)
+    code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=50, unique=True)
     info = CKEditor5Field(blank=True, null=True) # for tooltip
     website = models.URLField(blank=True, null=True)
@@ -53,7 +54,7 @@ class Database(models.Model):
 class DatabaseObject(models.Model):
     id = models.AutoField(primary_key=True, db_index=True)
     database = models.ForeignKey(Database, on_delete=models.CASCADE)
-    ortho = models.CharField(max_length=50, verbose_name="Word", db_index=True) # db_index speeds up filter and ordering a lot !
+    ortho = models.CharField(max_length=100, verbose_name="Word", db_index=True) # db_index speeds up filter and ordering a lot !
     jsonData = models.JSONField(null=True, db_index=True) # not sure db_index works on jsonField. TODO : retest with standard columns against jsonData. It should be faster with standard columns with db_index, but to which point ?
 
     class Meta:

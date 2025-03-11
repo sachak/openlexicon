@@ -16,10 +16,14 @@ class DatabaseAdmin(admin.ModelAdmin):
             obj.delete()
 
 class DatabaseColAdmin(admin.ModelAdmin):
-    list_display = ('database', 'name', 'type',)
+    list_display = ('database', 'name', 'type', 'min', 'max')
     ordering = ["database", "name"]
+
+class DatabaseObjAdmin(admin.ModelAdmin):
+    list_display = ('id', 'database', 'ortho', )
+    ordering = ["ortho"]
 
 admin.site.register(Database, DatabaseAdmin)
 admin.site.register(DatabaseColumn, DatabaseColAdmin)
-admin.site.register(DatabaseObject)
+admin.site.register(DatabaseObject, DatabaseObjAdmin)
 admin.site.register(Tag)

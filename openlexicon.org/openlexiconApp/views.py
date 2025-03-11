@@ -3,10 +3,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import render
 from .datatable import ServerSideDatatableView
-from .models import DatabaseObject, Database, DatabaseColumn, ColType
+from .models import DatabaseObject, Database, DatabaseColumn, ColType, Tag
 from .utils import *
 import json
 import os
+import pandas as pd
 
 # https://datatables.net/examples/data_sources/server_side.html
 def home(request, column_list=[]):
@@ -28,71 +29,85 @@ def home(request, column_list=[]):
 @login_required
 def import_data(request):
     # TODO : Do some filters on files uploaded (json only, injection, etc.)
-    if request.method == 'POST' and request.FILES['json_file']:
-        json_file = request.FILES['json_file']
-        try:
-            col_file = request.FILES['col_file']
-            col_data = json.load(col_file)
-        except:
-            col_data = {}
+    if request.method == 'POST':
+        tsv_file = request.FILES['tsv_file']
 
-        word_col = request.POST.get("word_col")
-        db_name = os.path.splitext(json_file.name)[0]
-        db_filter = Database.objects.filter(name=db_name)
-        data = json.load(json_file)
+        #######################
+        #### Database info ####
+        #######################
+
+        if 'text_file' in request.FILES:
+            database_info, col_info = get_database_info(request.FILES['text_file'])
+            db_name = database_info["name"]
+        else:
+            database_info, col_info = {}, {}
+            db_name = os.path.splitext(tsv_file.name)[0]
+        db_code = db_name.replace(" ", "")
+
+        # Check if database exists, else create it
+        db_filter = Database.objects.filter(code=db_code)
         if not db_filter.exists():
-            db = Database.objects.create(name=db_name)
+            db = Database.objects.create(code=db_code, name=db_name)
         else:
             db = db_filter[0]
-        # Create database columns if they do not exist
-        if len(data["data"]) > 0:
-            model = data["data"][0]
-            col_types = {}
-            cols = {}
-            for key in model.keys():
-                if key != word_col:
-                    col_filter = DatabaseColumn.objects.filter(database=db, code=key)
-                    if not col_filter.exists():
-                        col = DatabaseColumn.objects.create(database=db, code=key)
-                        cols[key] = col
-                        # if we have info on column provided by col_file.json, we replace default values with the ones provided
-                        if key in col_data:
-                            for attr in ["name", "size", "type"]:
-                                setattr(col, attr, col_data[key][attr])
-                            col.save()
-                            col_types[col.code] = col.type
+
+        # Set database info from text file
+        for key in database_info:
+            if key == "tags":
+                tags = []
+                for tag in database_info["tags"]:
+                    tag_filter = Tag.objects.filter(name=tag.capitalize())
+                    if not tag_filter.exists(): # Create tag
+                        tag = Tag.objects.create(name=tag.capitalize())
+                        tags.append(tag)
                     else:
-                        col_types[col_filter[0].code] = col_filter[0].type
+                        tags.append(tag_filter[0])
+                # Delete old many to many tags and save new ones
+                # TODO : delete tags with no relation to database left
+                save_many_relations("tags", db, tags)
+            elif key != "champs oblig":
+                setattr(db, key, database_info[key])
+        db.save()
+
+        # Load TSV file
+        data_df = load_tsv_file(tsv_file)
+        word_col_idx = int(request.POST.get("word_col"))
+
+        # Database columns
+        if len(data_df) > 0:
+            col_dict = get_column_info(data_df, db, database_info, col_info, word_col_idx)
         objs = []
-        for item in data["data"]:
+
+        ################################
+        #### Create DatabaseObjects ####
+        ################################
+
+        for index, row in data_df.iterrows():
             jsonDict = {}
             dbObj = DatabaseObject()
-            for attr in item.keys():
-                dbattr = attr
-                itemAttr = item[attr]
-                if attr == word_col:
+            for col_count, col_name in enumerate(data_df.columns.values):
+                dbattr = col_name
+                itemAttr = row[col_name]
+                if pd.isnull(itemAttr):
+                    itemAttr = None
+                if col_count == word_col_idx:
                     dbattr = "ortho"
-                elif col_types[attr] in [ColType.INT, ColType.FLOAT]: # remove all spaces from columns declared as int/float
-                    itemAttr = itemAttr.replace(" ", "")
-                    if itemAttr != "":
-                        convertedItem = float(itemAttr)
-                        if cols[attr].min == None or convertedItem < float(cols[attr].min): # "" is considered inferior to "0" so we convert to float when doing comparison
-                            cols[attr].min = itemAttr
-                        if cols[attr].max == None or convertedItem > float(cols[attr].max):
-                            cols[attr].max = itemAttr
-                    else: # if string is "", we consider it to be None
-                        itemAttr = None
-                if attr != word_col:
+                else:
+                    col = col_dict[col_name]
+                    if itemAttr is not None and col.type in [ColType.INT, ColType.FLOAT]:
+                        if col.min == None or itemAttr < col.min:
+                            col.min = itemAttr
+                        if col.max == None or itemAttr > col.max:
+                            col.max = itemAttr
+                if col_count != word_col_idx:
                     jsonDict[dbattr] = itemAttr
-                try:
+                else:
                     setattr(dbObj, dbattr, itemAttr)
-                except:
-                    continue
             objs.append(dbObj)
             dbObj.jsonData = jsonDict
             dbObj.database = db
         DatabaseObject.objects.bulk_create(objs) # bulk to avoid multiple save requests
-        DatabaseColumn.objects.bulk_update(cols.values(), fields=["min", "max"])
+        DatabaseColumn.objects.bulk_update(col_dict.values(), fields=["min", "max"])
         # Update database number of rows
         db.nbRows = DatabaseObject.objects.filter(database=db).count()
         db.save()

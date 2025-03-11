@@ -36,3 +36,5 @@ Pipfile.lock
 static/*
 openlexicon/static/*.json
 openlexicon/static/*/*.json
+*fixedHeader.dataTables*
+*dataTables.fixedHeader*
