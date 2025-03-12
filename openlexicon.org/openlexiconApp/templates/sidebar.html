@@ -4,6 +4,21 @@
     <div id="sidebar_filter" class="col p-0 text-white w-sidebar d-md-flex sidebar">
         <!-- fixed sidebar -->
         <div class="navbar-light w-sidebar">
+            <div class="how-to">
+                <b>Quick how-to</b>
+                <ul>
+                    <li>Select desired <b>datasets</b>. If you want more informations about a specific dataset, you can hover over its tooltip.</li>
+                    <li>Select <b>columns</b> to display for each dataset.</li>
+                    <li>For each column in the table, you can:</li>
+                    <ul>
+                        <li>Hover the mouse over the column name to see a brief description</li>
+                        <li>Filter using <b>intervals (e.g. 40...500)</b> or <b>regular expressions</b></li>
+                        <li>Sort, ascending or descending</li>
+                    </ul>
+                    <li><b>Download</b> the result of your manipulations by clicking on the TSV or EXCEL buttons above the table</li>
+                </ul>
+            </div>
+
             {% for database, column_list in all_columns.items %}
             <div> <!-- if we want only one dropdown open at any given time, add class "nav-menu" -->
                 <div class="nav-menu-text list-group-item list-group-item-action" id="submenu_{{database.id}}_head" onclick="menu_click(event)">

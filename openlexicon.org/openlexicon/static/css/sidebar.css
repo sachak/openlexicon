@@ -2,15 +2,15 @@
 /* In case we need flex : https://moduscreate.com/blog/how-to-fix-overflow-issues-in-css-flex-layouts/ */
 
 .overflow-container {
-    margin-left: 282px;
+    margin-left: 382px;
 }
 
 /* sidebar style */
 
 .w-sidebar {
-    width: 272px;
-    max-width: 272px;
-    margin-right:10px;
+    width: 362px;
+    max-width: 362px;
+    margin-right:20px;
 }
 
 .sidebar {
@@ -56,4 +56,13 @@
 
 .database-checkbox {
     transform: scale(1.3);
+}
+
+.how-to {
+    color: #000;
+    text-align: justify;
+    padding:1em;
+    border: 1px solid rgba(0,0,0,.125);
+    border-radius: 0.25rem;
+    font-size:0.95em;
 }
