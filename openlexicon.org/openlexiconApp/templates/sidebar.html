@@ -49,7 +49,11 @@
     });
 
     {% for database in all_columns.keys %}
-        make_popover("submenu_{{database.id}}_head", "{{database.info}}", label=true);
+        database_info = "{{database.info}}";
+        {% if database.website is not None %}
+            database_info += "<br><br><b>Site web</b> : <a href='{{database.website}}' target='_blank'>{{database.website}}</a>"
+        {% endif %}
+        make_popover("submenu_{{database.id}}_head", database_info, label=true);
     {% endfor %}
 
     function handle_checkbox_disable(bool) {

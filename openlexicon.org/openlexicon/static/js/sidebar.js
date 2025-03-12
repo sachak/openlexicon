@@ -33,8 +33,8 @@ function open_menu(menu) {
 function menu_click(event) {
     let menu = $(event.target);
     if(!menu.hasClass('nav-menu-text')) {
-        // if clicked on the checkbox
-        if (menu.hasClass("database-checkbox")){
+        // if clicked on the checkbox or tooltip
+        if (menu.hasClass("database-checkbox") || menu.parents('.tooltipable').length > 0){
             return;
         }
         menu = $(menu.parents('.nav-menu-text'));
@@ -75,7 +75,7 @@ function make_popover(id, def, label=false, content=null, link=null) {
     tag.setAttribute("role", "button");
 
     $(tag).popover({
-        container: 'body'
+        container: $(tag)
     });
 
     if (content == null) {
