@@ -50,3 +50,47 @@ function menu_click(event) {
     }
     return false;
 }
+
+
+// id: id of the element that will contain the tooltip
+// def: content of the tooltip
+// content: text that triggers the tooltip
+// if content is null, puts a questionmark.
+function make_popover(id, def, label=false, content=null, link=null) {
+    var tag;
+    if (link != null) {
+        if (def != "") {
+            def += "<br>";
+        }
+        def += "<a class='float-right' href='" + link + "'> " + gettext("Edit") +" </a>";
+    }
+    tag = document.createElement("a");
+    tag.setAttribute("data-html", "true");
+    tag.setAttribute("class", "tooltipable");
+    tag.setAttribute("data-toggle", "popover");
+    tag.setAttribute("data-placement", "auto");
+    tag.setAttribute("data-trigger", "hover");
+    tag.setAttribute("data-content", def);
+    tag.setAttribute("tabindex", "0");
+    tag.setAttribute("role", "button");
+
+    $(tag).popover({
+        container: 'body'
+    });
+
+    if (content == null) {
+        var symbol = document.createElement("i");
+        symbol.setAttribute("class", "fa fa-question-circle");
+        tag.appendChild(symbol);
+        tag.setAttribute("style", "margin-left: auto;");
+    } else {
+        tag.append(content);
+    }
+    if (!label){
+        document.getElementById(id).insertBefore(document.createElement("br"), document.getElementById(id).firstChild);
+        document.getElementById(id).insertBefore(tag, document.getElementById(id).firstChild);
+    }
+    else{
+        $(tag).insertBefore($("#" + id).children('.submenu-icon'));
+    }
+}

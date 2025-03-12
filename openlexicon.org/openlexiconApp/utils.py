@@ -150,7 +150,7 @@ class DbColMap:
             self.column_dict[db] = []
             for col in column_queryset:
                 col_dict = {}
-                for attr in ["id", "code", "size", "type"]:
+                for attr in ["id", "code", "size", "type", "description"]:
                     col_dict[attr] = getattr(col, attr)
                 self.string_column_dict[db.id].append(col_dict)
                 self.column_dict[db].append(col)

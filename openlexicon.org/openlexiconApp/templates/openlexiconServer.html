@@ -15,7 +15,7 @@
 {% endblock %}
 
 {% block extraheadjs %}
-<script src="{% static 'js/datatables/dataTables-2.1.8.min.js' %}"></script>
+<script type="application/javascript" src="{% static 'js/datatables/dataTables-2.1.8.min.js' %}"></script>
 <script type="application/javascript" src="{% static 'js/datatables/dataTables.buttons-3.1.2.min.js' %}"></script>
 <script type="application/javascript" src="{% static 'js/datatables/buttons.dataTables-3.1.2.js' %}"></script>
 <script type="application/javascript" src="{% static 'js/datatables/buttons.html5-3.1.2.min.js' %}"></script>
@@ -110,10 +110,14 @@
         for (const database_id of database_order) { // we have separate array of database ids to keep database order as we want (order of json object keys is not preserved)
             column_list = column_dict[database_id];
             for (const col of column_list) {
-                $colHeader = $("<th id='"+database_id+"__"+col.id+"' class='"+col.type+" "+col.size+"-col'>"+col.code+"</th>")
+                colDescription = col.description != null ? col.description : '';
+                $colHeader = $("<th id='"+database_id+"__"+col.id+"' class='"+col.type+" "+col.size+"-col' data-toggle='tooltip' data-placement='top' title='" + colDescription + "'>"+col.code+"</th>")
                 $dbHeader.append($colHeader);
             }
         }
+
+        // Style tooltips
+        $('[data-toggle="tooltip"]').tooltip();
 
         // Setup - add a text input to each column
         // Get back filter columns

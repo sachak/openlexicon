@@ -16,7 +16,7 @@
                     {% for column in column_list %}
                     <div id='div_check_{{column.id}}' class="list-group-item list-group-item-action navbar-item-text">
                         <input type="checkbox" id="checkbox_col_{{column.id}}" name="{{database.id}}" onclick="check_instance(this);" disabled/>
-                        <label for="checkbox_col_{{column.id}}" style="margin-bottom:0">{{column}}</label>
+                        <label for="checkbox_col_{{column.id}}" style="margin-bottom:0" data-toggle="tooltip" data-placement="top" title="{% if column.description != None %}{{column.description}}{% endif %}">{{column}}</label>
                     </div>
                     {% endfor %}
                 </div>
@@ -47,6 +47,10 @@
             collapse_menu(this);
         }
     });
+
+    {% for database in all_columns.keys %}
+        make_popover("submenu_{{database.id}}_head", "{{database.info}}", label=true);
+    {% endfor %}
 
     function handle_checkbox_disable(bool) {
         $("#sidebar_filter").find('input').each(function () {

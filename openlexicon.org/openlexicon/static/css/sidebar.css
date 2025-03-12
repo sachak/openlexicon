@@ -25,6 +25,7 @@
 
 .submenu-icon { /* place dropdown button to the right */
     float:right;
+    margin-left: 0.5em !important;
 }
 
 .navbar-item-text {
