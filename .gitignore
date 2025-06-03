@@ -13,3 +13,4 @@ apps/unipseudo/tests/*
 .DS_Store
 **/.DS_Store
 
+__MACOSX/
