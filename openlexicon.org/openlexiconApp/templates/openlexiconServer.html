@@ -53,6 +53,42 @@
 
     check_columns();
 
+    function floatedVals(vals) {
+        return vals.map(val => parseFloat(val));
+    }
+
+    function has_comp_operator(operator, filterVal) {
+        return new RegExp("^[ ]*" + operator + "[ ]*\\d+(\\.\\d+)?[ ]*$").test(filterVal);
+    }
+
+    function get_filter_array(filterVal, colMin, colMax) { // return array with min/max values for float/int filters. Accepts ... > < notations.
+        // TODO : for now < and > do not exclude bounds, which is counterintuitive. To recheck.
+        for (const op of ["<", "<=", ">", ">="]) {
+            if (has_comp_operator(op, filterVal)) { // one value only less/greater than or equal
+                switch (op) {
+                    case "<":
+                    case "<=":
+                        return floatedVals([colMin, filterVal.split(op)[1]]);
+                        break;
+                    case ">":
+                    case ">=":
+                        return floatedVals([filterVal.split(op)[1], colMax]);
+                        break;
+                }
+            }
+        }
+        // ellipsis
+        filterVals = filterVal.split("...");
+        if (/^[ ]*\d+(\.\d+)?[ ]*[.]{3}[ ]*$/.test(filterVal)) { // left val only
+            return floatedVals([filterVals[0], colMax]);
+        }else if (/^[ ]*[.]{3}[ ]*\d+(\.\d+)?[ ]*$/.test(filterVal)) { // right val only
+            return floatedVals([colMin, filterVals[1]]);
+        }else if (/^[ ]*\d+(\.\d+)?[ ]*[.]{3}[ ]*\d+(\.\d+)?[ ]*$/.test(filterVal)) { // val on both sides
+            return floatedVals(filterVals)
+        }
+        return [];
+    }
+
     function check_columns() {
         checkbox_ready = false;
         // Check cols on sidebar
@@ -300,22 +336,24 @@
 
             filterSlider.noUiSlider.on('set', function( values, handle ) {
                 if (!compareArrays(values.map(function(e) {return parseFloat(e);}), data_column)) {
-                    $filterInput.val(values[0] + " ... " + values[1]);
+                    if (!manualSet) { // set filter text format to default only if using slider
+                        $filterInput.val(values[0] + " ... " + values[1]);
+                    }
                 }else{
                     $filterInput.val("")
                     values = ""; // set values to empty string to avoid searching for min/max values (which equals applying no filter)
                 }
-                if (!manualSet || handle == 1) {
+                if (!manualSet || handle == 1) { // if manualset, we want handle == 1 to avoid triggering slider twice (for both handles)
                     table
                         .column($filterInput.data('index'))
                         .search(values)
                         .draw();
                     manualSet = false;
-                    localStorage[id] = $filterInput.val();
+                    localStorage[id] = values.join(" ... ");
                 }
             });
 
-            $filterInput.on('keyup', function() {
+            $filterInput.on('input', function() {
                 if (timer) { // clear previous timer if there is one
                    clearTimeout(timer);
                 }
@@ -325,7 +363,7 @@
                     if (v == "") { // all
                         v = data_column;
                     } else {
-                        v = v.split(" ... ")
+                        v = get_filter_array(v, data_column[0], data_column[1]);
                         if (v.length !== 2 || isNaN(v[0]) || isNaN(v[1]) || v[0] > v[1]) {
                             $filterInput.addClass('is-invalid');
                             isvalid = false;
