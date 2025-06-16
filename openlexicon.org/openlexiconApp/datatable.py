@@ -220,10 +220,13 @@ class DataTablesServer(object):
             self._sorting = "ortho"
 
         # Determine database of reference (ref_db) for count and column grouping.
-        self.ref_db = self.databases[0]
-        if len(self.databases) > 1:
-            if default_db in self.databases:
-                self.ref_db = default_db
+        if len(self.databases) > 0: # WARNING : if we deselect all columns, we will have no database left.
+            self.ref_db = self.databases[0]
+            if len(self.databases) > 1:
+                if default_db in self.databases:
+                    self.ref_db = default_db
+        else:
+            self.ref_db = None
 
         # Get count from cache
         self.get_cache_data()

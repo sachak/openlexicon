@@ -116,7 +116,10 @@ def import_data(request):
 # https://github.com/umesh-krishna/django_serverside_datatable/tree/master
 class ItemListView(ServerSideDatatableView):
     def get(self, request, *args, **kwargs):
-        column_list = kwargs.get('column_list') # column_list is provided by home view, we always have a column_list in ItemListView
-        column_list = column_list.split(",")
+        try:
+            column_list = kwargs.get('column_list') # column_list is provided by home view, we always have a column_list in ItemListView
+            column_list = column_list.split(",")
+        except AttributeError: # no column_list -> no columns selected
+            column_list = []
         self.dbColMap = DbColMap(column_list)
         return super(ItemListView, self).get(request, *args, **kwargs)

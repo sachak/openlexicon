@@ -97,16 +97,10 @@
                     }
                 {% endfor %}
             {% endfor %}
-            if (new_col_string.length != 0)  { // need at least one column selected
-                col_string = new_col_string.join(",");
-                column_dict = new_column_dict;
-                database_order = new_database_order;
-                set_table(true);
-            } else {
-                alert("We can't let you deselect all columns !");
-                check_columns();
-                handle_checkbox_disable(false);
-            }
+            col_string = new_col_string.join(",");
+            column_dict = new_column_dict;
+            database_order = new_database_order;
+            set_table(true);
         }
     }
 
