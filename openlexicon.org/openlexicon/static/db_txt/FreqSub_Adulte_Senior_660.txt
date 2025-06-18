@@ -1,0 +1,8 @@
+Nom	FreqSub_Adulte_Senior_660
+Tags	Fréquence Subjective
+Description	<b>Fréquences subjectives</b> pour des adultes et des adultes senior pour 660 mots
+Auteurs	
+Site web	
+Langue	French
+Champs Oblig
+Champs

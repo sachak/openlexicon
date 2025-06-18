@@ -1,0 +1,8 @@
+Nom	FreqSub_Imag_1916
+Tags	Fréquence Subjective, Imageabilité
+Description	La présente recherche rapporte des estimations normatives de fréquence subjective et d’imagerie sur des échelles en 7 points pour 1,916 substantifs de la langue française.
+Auteurs	Desrochers, A., & Bergeron, M.
+Site web	http://www.lexique.org/?page_id=510
+Langue	French
+Champs Oblig
+Champs

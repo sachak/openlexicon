@@ -1,0 +1,8 @@
+Nom	SensoryExp_1659
+Tags	Expérience Sensorielle
+Description	Nous avons collecté les normes d’expérience sensorielle (TES) de 1 659 mots français chez les adultes. L’expérience sensorielle pour les mots est une variable récemment introduite qui correspond au degré auquel les mots suscitent des expériences sensorielles et perceptuelles.
+Auteurs	Bonin, P., Méot, A., Ferrand, L., & Bugaïska, A.
+Site web	http://www.lexique.org/?page_id=473
+Langue	French
+Champs Oblig	
+Champs

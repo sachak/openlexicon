@@ -1,0 +1,8 @@
+Nom	Img_AoA_..._400
+Tags	Imageabilité, Age d'acquisition
+Description	La présente base de données fournit des normes françaises pour 400 dessins au trait tirés de Cycowiez, Friedman, Rothstein et Snodgrass (1997), y compris les 260 dessins au trait normalisés par Snodgrass et Vanderwart (1980). Les images ont été normalisées en fonction des variables suivantes : accord de nom, accord de l’image, familiarité, complexité visuelle, variabilité de l’image et âge d’acquisition. Ces données normatives comprennent également les valeurs de fréquence des mots et le premier associé verbal (extrait de Ferrand & Alario, 1998). Les six variables obtenues sont importantes en raison de leur effet potentiel dans de nombreux domaines de la psychologie, en particulier l’étude des processus cognitifs tels que la perception visuelle, le langage et la mémoire.
+Auteurs	Alario, F. X., & Ferrand, L. 
+Site web	http://www.lexique.org/?page_id=461
+Langue	French
+Champs Oblig
+Champs

@@ -1,0 +1,8 @@
+Nom	Valemo_Enfants_600
+Tags	Valence Emotionnelle
+Description	La présente étude fournit une base de données française pour enfants contenant un vaste corpus de mots (N = 600) qui ont été évalués sur leur valence émotionnelle (positive, neutre et négative) selon l’âge des enfants (5, 7 et 9 ans) et leur sexe (filles et garçons)
+Auteurs	Syssau, A., & Monnier, C. 
+Site web	http://www.lexique.org/?page_id=500
+Langue	French
+Champs Oblig	
+Champs
