@@ -149,8 +149,8 @@ class DbColMap:
                 self.column_dict[database].append(col_pk)
         # Get DatabaseColumn objects
         for db in self.databases:
-            try:column_queryset = DatabaseColumn.objects.filter(database=db, id__in=self.column_dict[db]).select_related("database")
-            except:column_queryset = DatabaseColumn.objects.filter(database=db, code__in=self.column_dict[db]).select_related("database")
+            try:column_queryset = DatabaseColumn.objects.filter(database=db, id__in=self.column_dict[db]).order_by("id").select_related("database")
+            except:column_queryset = DatabaseColumn.objects.filter(database=db, code__in=self.column_dict[db]).order_by("id").select_related("database")
             self.column_dict[db] = []
             for col in column_queryset:
                 col_dict = {}
