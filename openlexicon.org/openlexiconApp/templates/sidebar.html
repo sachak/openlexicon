@@ -22,7 +22,7 @@
             {% for database, column_list in all_columns.items %}
             <div> <!-- if we want only one dropdown open at any given time, add class "nav-menu" -->
                 <div class="nav-menu-text list-group-item list-group-item-action" id="submenu_{{database.id}}_head" onclick="menu_click(event)">
-                    <input type="checkbox" id="checkbox_db_{{database.id}}" name="{{database.id}}" class="database-checkbox" onclick="check_all(this)"/>
+                    <input type="checkbox" id="checkbox_db_{{database.id}}" name="{{database.id}}" class="database-checkbox" onclick="check_all(this)" autocomplete="off"/>
                     <span class="sidebar-span">{{database}}</span>
                     <span class="submenu-icon ml-auto"> <i class="fas"></i> </span>
                 </div>
@@ -30,7 +30,7 @@
                 <div id='submenu_{{database.id}}' class="collapse submenu-collapse">
                     {% for column in column_list %}
                     <div id='div_check_{{column.id}}' class="list-group-item list-group-item-action navbar-item-text">
-                        <input type="checkbox" id="checkbox_col_{{column.id}}" name="{{database.id}}" onclick="check_instance(this);" disabled/>
+                        <input type="checkbox" id="checkbox_col_{{column.id}}" name="{{database.id}}" onclick="check_instance(this);" disabled autocomplete="off"/>
                         <label for="checkbox_col_{{column.id}}" style="margin-bottom:0" data-toggle="tooltip" data-placement="top" title="{% if column.description != None %}{{column.description}}{% endif %}">{{column}}</label>
                     </div>
                     {% endfor %}
