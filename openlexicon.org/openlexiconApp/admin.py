@@ -23,7 +23,11 @@ class DatabaseObjAdmin(admin.ModelAdmin):
     list_display = ('id', 'database', 'ortho', )
     ordering = ["ortho"]
 
+class TagAdmin(admin.ModelAdmin):
+    list_display = ('name', )
+    ordering = ["name"]
+
 admin.site.register(Database, DatabaseAdmin)
 admin.site.register(DatabaseColumn, DatabaseColAdmin)
 admin.site.register(DatabaseObject, DatabaseObjAdmin)
-admin.site.register(Tag)
+admin.site.register(Tag, TagAdmin)

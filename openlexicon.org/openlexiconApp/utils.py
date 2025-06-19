@@ -1,3 +1,4 @@
+from django.conf import settings
 from .models import Database, DatabaseColumn, ColType, ColSize
 from openlexicon.render_data import debug_log
 import chardet
@@ -10,7 +11,8 @@ text_file_keys = {
     "nom": "name",
     "description": "info",
     "site web": "website",
-    "langue": "language"
+    "langue": "language",
+    "auteurs": "authors"
 }
 
 def save_many_relations(db_name, container, selected_items):
@@ -40,7 +42,8 @@ def get_database_info(text_file):
         if getting_col_info: # currently getting columns description
             col_info[line_key] = line_split[1].strip()
         elif line_key in ["tags", "champs oblig"]: # list fields
-            database_info[line_key] = [x.lower().strip() for x in line_split[1].split(",")]
+            try: database_info[line_key] = [x.lower().strip() for x in line_split[1].split(",")]
+            except IndexError: database_info[line_key] = []
         elif line_key == "champs": # encountered champs. All lines after that should be columns description
             getting_col_info = True
         else: # name, description, website and language fields
@@ -54,6 +57,7 @@ def get_column_info(df, db, database_info, col_info, word_col_idx):
     mandatory_columns = database_info["champs oblig"]
     col_dict = {}
     for col_count, col in enumerate(df.columns):
+        clean_col = DatabaseColumn.cleanColName(col)
         if col_count != word_col_idx:
             col_type = df[col].dtype
             col_filter = DatabaseColumn.objects.filter(database=db, code=col)
@@ -70,8 +74,8 @@ def get_column_info(df, db, database_info, col_info, word_col_idx):
                     raise Exception(f"No valid type for column {col}, type detected {col_type}")
                 col_obj = DatabaseColumn.objects.create(
                     database=db,
-                    code=col,
-                    name=col,
+                    code=clean_col,
+                    name=clean_col,
                     type=type,
                     size=size,
                     mandatory=col.lower() in mandatory_columns,
@@ -111,7 +115,7 @@ def load_tsv_file(tsv_file):
             df = pd.read_csv(StringIO(tsv_file), sep='\t', keep_default_na=False, na_values=[''])
     else:
         tsv_file.seek(0)
-        df = pd.read_csv(tsv_file, sep="\t", keep_default_na=False, na_values=[''])
+        df = pd.read_csv(tsv_file, sep="\t", keep_default_na=False, na_values=['']) # TODO : is it enough to consider just '' as nan ?
     # Remove spaces from cells with numbers only
     for col in list(df.columns):
         df[col] = df[col].apply(remove_spaces)
@@ -171,7 +175,7 @@ class DbColMap:
 
 export_sep = ","
 
-default_DbColList = [f"Lexique4__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']]
+default_DbColList = [f"{settings.DEFAULT_DB}__{col_name}" for col_name in ['phon', 'lemme', 'cgram', 'freqlemfilms2', 'freqfilms2', 'nblettres', 'puorth', 'puphon', 'nbsyll', 'cgramortho']]
 
-try: default_db = Database.objects.get(code="Lexique4")
+try: default_db = Database.objects.get(code=settings.DEFAULT_DB)
 except: default_db = Database.objects.none()

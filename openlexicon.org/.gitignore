@@ -38,3 +38,4 @@ openlexicon/static/*.json
 openlexicon/static/*/*.json
 *fixedHeader.dataTables*
 *dataTables.fixedHeader*
+openlexicon/static/db_txt/*.tsv

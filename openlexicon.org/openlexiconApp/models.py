@@ -41,8 +41,9 @@ class Database(models.Model):
     name = models.CharField(max_length=50, unique=True)
     info = CKEditor5Field(blank=True, null=True) # for tooltip
     website = models.URLField(blank=True, null=True)
+    authors = models.CharField(blank=True, null=True, max_length=400)
     language = models.CharField(max_length=20, choices=Lang.choices, default=Lang.FR)
-    nbRows = models.IntegerField(null=True)
+    nbRows = models.IntegerField(default=0)
     tags = models.ManyToManyField(
         Tag,
         related_name="databases"
@@ -54,7 +55,7 @@ class Database(models.Model):
 class DatabaseObject(models.Model):
     id = models.AutoField(primary_key=True, db_index=True)
     database = models.ForeignKey(Database, on_delete=models.CASCADE)
-    ortho = models.CharField(max_length=100, verbose_name="Word", db_index=True) # db_index speeds up filter and ordering a lot !
+    ortho = models.CharField(max_length=400, verbose_name="Word", db_index=True) # db_index speeds up filter and ordering a lot !
     jsonData = models.JSONField(null=True, db_index=True) # not sure db_index works on jsonField. TODO : retest with standard columns against jsonData. It should be faster with standard columns with db_index, but to which point ?
 
     class Meta:
@@ -74,6 +75,12 @@ class DatabaseColumn(models.Model):
 
     def __str__(self):
         return self.name
+
+    @staticmethod
+    def cleanColName(colName):
+        for c in "\"';., `":
+            colName = colName.replace(c, "_")
+        return colName
 
     class Meta:
         unique_together = ('database', 'code',)

@@ -151,6 +151,9 @@ html, body {
 {% endblock %}
 
 {% block content %}
+<div class="wait-message" style="display:none;height:100%;justify-content:center;align-items:center;">
+    {% include 'ring.html' %}
+</div>
 <div class="form-body">
     <div class="row">
         <div class="form-holder">
@@ -163,11 +166,11 @@ html, body {
                     </form>
                     {% endif %}
                     <h3>Import data</h3>
-                    <form method="post" class="requires-validation" enctype="multipart/form-data">
+                    <form id="import_form" method="post" class="requires-validation" enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="col-md-12">
                         <label for="tsv_file">TSV File</label><br>
-                        <input class="form-control" type="file" name="tsv_file" required><br><br>
+                        <input class="form-control" type="file" name="tsv_file"><br><br>
                         <label for="tsv_file">Description File</label><br>
                         <input class="form-control" type="file" name="text_file"><br><br>
                         <label for="word_col">Column index for Word</label><br>
@@ -179,4 +182,14 @@ html, body {
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extrajavascript %}
+<script>
+    $("#import_form").on("submit", function(e) {
+        $(".form-body").css("display", "none");
+        $(".alert").css("display", "none");
+        $(".wait-message").css("display", "flex");
+    });
+</script>
 {% endblock %}

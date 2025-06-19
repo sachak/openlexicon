@@ -30,87 +30,93 @@ def home(request, column_list=[]):
 def import_data(request):
     # TODO : Do some filters on files uploaded (json only, injection, etc.)
     if request.method == 'POST':
-        tsv_file = request.FILES['tsv_file']
 
         #######################
         #### Database info ####
         #######################
 
+        isvalid = True
         if 'text_file' in request.FILES:
             database_info, col_info = get_database_info(request.FILES['text_file'])
             db_name = database_info["name"]
-        else:
+        elif 'tsv_file' in request.FILES:
             database_info, col_info = {}, {}
-            db_name = os.path.splitext(tsv_file.name)[0]
-        db_code = db_name.replace(" ", "")
-
-        # Check if database exists, else create it
-        db_filter = Database.objects.filter(code=db_code)
-        if not db_filter.exists():
-            db = Database.objects.create(code=db_code, name=db_name)
+            db_name = os.path.splitext(request.FILES['tsv_file'].name)[0]
         else:
-            db = db_filter[0]
+            messages.error(request, ("Aucun fichier fourni !"))
+            isvalid = False
 
-        # Set database info from text file
-        for key in database_info:
-            if key == "tags":
-                tags = []
-                for tag in database_info["tags"]:
-                    tag_filter = Tag.objects.filter(name=tag.capitalize())
-                    if not tag_filter.exists(): # Create tag
-                        tag = Tag.objects.create(name=tag.capitalize())
-                        tags.append(tag)
-                    else:
-                        tags.append(tag_filter[0])
-                # Delete old many to many tags and save new ones
-                save_many_relations("tags", db, tags)
-            elif key != "champs oblig":
-                setattr(db, key, database_info[key])
-        db.save()
+        if isvalid:
+            db_code = db_name.replace(" ", "")
 
-        # Load TSV file
-        data_df = load_tsv_file(tsv_file)
-        word_col_idx = int(request.POST.get("word_col"))
+            # Check if database exists, else create it
+            db_filter = Database.objects.filter(code=db_code)
+            if not db_filter.exists():
+                db = Database.objects.create(code=db_code, name=db_name)
+            else:
+                db = db_filter[0]
 
-        # Database columns
-        if len(data_df) > 0:
-            col_dict = get_column_info(data_df, db, database_info, col_info, word_col_idx)
-        objs = []
+            # Set database info from text file
+            for key in database_info:
+                if key == "tags":
+                    tags = []
+                    for tag in database_info["tags"]:
+                        tag_filter = Tag.objects.filter(name=tag.capitalize())
+                        if not tag_filter.exists(): # Create tag
+                            tag = Tag.objects.create(name=tag.capitalize())
+                            tags.append(tag)
+                        else:
+                            tags.append(tag_filter[0])
+                    # Delete old many to many tags and save new ones
+                    save_many_relations("tags", db, tags)
+                elif key != "champs oblig":
+                    setattr(db, key, database_info[key])
+            db.save()
 
-        ################################
-        #### Create DatabaseObjects ####
-        ################################
+            # Load TSV file
+            if 'tsv_file' in request.FILES:
+                data_df = load_tsv_file(request.FILES['tsv_file'])
+                word_col_idx = int(request.POST.get("word_col"))
 
-        for index, row in data_df.iterrows():
-            jsonDict = {}
-            dbObj = DatabaseObject()
-            for col_count, col_name in enumerate(data_df.columns.values):
-                dbattr = col_name
-                itemAttr = row[col_name]
-                if pd.isnull(itemAttr):
-                    itemAttr = None
-                if col_count == word_col_idx:
-                    dbattr = "ortho"
-                else:
-                    col = col_dict[col_name]
-                    if itemAttr is not None and col.type in [ColType.INT, ColType.FLOAT]:
-                        if col.min == None or itemAttr < col.min:
-                            col.min = itemAttr
-                        if col.max == None or itemAttr > col.max:
-                            col.max = itemAttr
-                if col_count != word_col_idx:
-                    jsonDict[dbattr] = itemAttr
-                else:
-                    setattr(dbObj, dbattr, itemAttr)
-            objs.append(dbObj)
-            dbObj.jsonData = jsonDict
-            dbObj.database = db
-        DatabaseObject.objects.bulk_create(objs) # bulk to avoid multiple save requests
-        DatabaseColumn.objects.bulk_update(col_dict.values(), fields=["min", "max"])
-        # Update database number of rows
-        db.nbRows = DatabaseObject.objects.filter(database=db).count()
-        db.save()
-        messages.success(request, ("Fichier importé !"))
+                # Database columns
+                if len(data_df) > 0:
+                    col_dict = get_column_info(data_df, db, database_info, col_info, word_col_idx)
+                objs = []
+
+                ################################
+                #### Create DatabaseObjects ####
+                ################################
+
+                for index, row in data_df.iterrows():
+                    jsonDict = {}
+                    dbObj = DatabaseObject()
+                    for col_count, col_name in enumerate(data_df.columns.values):
+                        dbattr = DatabaseColumn.cleanColName(col_name)
+                        itemAttr = row[col_name]
+                        if pd.isnull(itemAttr):
+                            itemAttr = None
+                        if col_count == word_col_idx:
+                            dbattr = "ortho"
+                        else:
+                            col = col_dict[col_name]
+                            if itemAttr is not None and col.type in [ColType.INT, ColType.FLOAT]:
+                                if col.min == None or itemAttr < col.min:
+                                    col.min = itemAttr
+                                if col.max == None or itemAttr > col.max:
+                                    col.max = itemAttr
+                        if col_count != word_col_idx:
+                            jsonDict[dbattr] = itemAttr
+                        else:
+                            setattr(dbObj, dbattr, itemAttr)
+                    objs.append(dbObj)
+                    dbObj.jsonData = jsonDict
+                    dbObj.database = db
+                DatabaseObject.objects.bulk_create(objs, ignore_conflicts=True) # bulk to avoid multiple save requests. Ignore conflicts to ignore duplicates.
+                DatabaseColumn.objects.bulk_update(col_dict.values(), fields=["min", "max"])
+                # Update database number of rows
+                db.nbRows = DatabaseObject.objects.filter(database=db).count()
+                db.save()
+            messages.success(request, ("Fichier importé !"))
     return render(request, 'importForm.html')
 
 # https://github.com/umesh-krishna/django_serverside_datatable/tree/master

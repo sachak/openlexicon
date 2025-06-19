@@ -1,4 +1,4 @@
-Nom	Lexique 3
+Nom	Lexique3
 Tags	Fréquence Subjective
 Description	Donne pour 140 000 mots français la fréquence d’occurrence dans différents corpus, la représentation phonologique, les lemmes associés, le nombre de syllabes, la catégorie grammaticale, etc.
 Auteurs	New, B., Pallier, C., Bourgin, J.
