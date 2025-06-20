@@ -17,7 +17,7 @@ def home(request, column_list=[]):
     else:
         column_list = DbColMap.listify_string(column_list)
     dbColMap = DbColMap(column_list)
-    all_columns = DatabaseColumn.objects.all().select_related("database").order_by("database__name", "id")
+    all_columns = DatabaseColumn.objects.all().select_related("database").order_by("database__name", "id") # TODO : order_by id is important so that headers list will be in the same order than values list (see DbColMap and datatable). Find a more robust way ?
     all_columns_dict = {}
     for col in all_columns:
         if col.database not in all_columns_dict:

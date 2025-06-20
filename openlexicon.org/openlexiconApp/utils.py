@@ -149,6 +149,7 @@ class DbColMap:
                 self.column_dict[database].append(col_pk)
         # Get DatabaseColumn objects
         for db in self.databases:
+             # TODO : order_by id is important so that headers list (see views home) will be in the same order than values list. Find a more robust way ?
             try:column_queryset = DatabaseColumn.objects.filter(database=db, id__in=self.column_dict[db]).order_by("id").select_related("database")
             except:column_queryset = DatabaseColumn.objects.filter(database=db, code__in=self.column_dict[db]).order_by("id").select_related("database")
             self.column_dict[db] = []
