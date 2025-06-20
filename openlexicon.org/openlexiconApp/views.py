@@ -93,6 +93,8 @@ def import_data(request):
                     for col_count, col_name in enumerate(data_df.columns.values):
                         dbattr = DatabaseColumn.cleanColName(col_name)
                         itemAttr = row[col_name]
+                        if isinstance(itemAttr, str):
+                            itemAttr = itemAttr.strip() # remove unwanted space at the start and end of string
                         if pd.isnull(itemAttr):
                             itemAttr = None
                         if col_count == word_col_idx:
